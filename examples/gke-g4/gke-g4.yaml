@@ -40,6 +40,8 @@ vars:
   k8s_service_account_name: workload-identity-k8s-sa
   accelerator_type: nvidia-rtx-pro-6000
   accelerator_count: 8
+  kueue_configuration_path: $(ghpc_stage("./kueue-configuration.yaml.tftpl"))
+  gib_installer_path: $(ghpc_stage("./nccl-installer.yaml.tftpl"))
 
 deployment_groups:
 - group: primary
@@ -181,15 +183,25 @@ deployment_groups:
         ))
     outputs: [instructions]
 
-  # Install Kueue and Jobset
+  # Install Kueue and Jobset, and NCCL installer
   - id: workload-manager-install
     source: modules/management/kubectl-apply
     use: [g4-cluster]
     settings:
       kueue:
         install: true
+        config_path: $(vars.kueue_configuration_path)
+        config_template_vars:
+          num_gpus: $(vars.accelerator_count)
+          accelerator_type: $(vars.accelerator_type)
       jobset:
         install: true
+      gib:
+        install: true  # NCCL gIB plugin via DaemonSet initContainer
+        path: $(vars.gib_installer_path)
+        template_vars:
+          version: v1.1.0
+          accelerator_count: $(vars.accelerator_count)
 
   - id: nvidia_smi_job_template
     source: modules/compute/gke-job-template
