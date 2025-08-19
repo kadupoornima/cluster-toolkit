@@ -192,7 +192,6 @@ deployment_groups:
         install: true
         config_path: $(vars.kueue_configuration_path)
         config_template_vars:
-          num_gpus: $(vars.accelerator_count)
           accelerator_type: $(vars.accelerator_type)
       jobset:
         install: true
