@@ -36,20 +36,15 @@ spec:
               networking.gke.io/interfaces: |
                 [
                   {"interfaceName":"eth0","network":"default"},
-                  {"interfaceName":"eth1","network":"vpc-0"},                
-                  {"interfaceName":"eth2","network":"vpc-1"}
+                  {"interfaceName":"eth1","network":"gvnic-1"}
                 ]
           spec:
             # Limit benchmark run duration
             activeDeadlineSeconds: 3600
             restartPolicy: Never
             nodeSelector:
-              cloud.google.com/gke-nodepool: g4-pool
+              cloud.google.com/gke-nodepool: g4-standard-384-g4-pool
             tolerations:
-            - key: cloud.google.com/gke-queued
-              effect: NoSchedule
-              value: "true"
-
             - key: "nvidia.com/gpu"
               operator: "Exists"
               effect: "NoSchedule"
