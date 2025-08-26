@@ -161,7 +161,7 @@ deployment_groups:
       - type: nvidia-rtx-pro-6000
         count: $(vars.accelerator_count)
         gpu_driver_installation_config:
-          gpu_driver_version: LATEST
+          gpu_driver_version: LATEST # TODO: Move to a fixed GPU driver version.
       additional_networks:
         $(concat(
           [{
