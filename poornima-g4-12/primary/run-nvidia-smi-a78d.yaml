@@ -1,0 +1,47 @@
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: run-nvidia-smi-a78d
+  labels:
+    ghpc_blueprint: gke-g4
+    ghpc_deployment: poornima-g4-12
+    ghpc_module: gke-job-template
+    ghpc_role: compute
+spec:
+  parallelism: 2
+  completions: 2
+  completionMode: Indexed
+  template:
+    spec:
+      serviceAccountName: workload-identity-k8s-sa
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+            - matchExpressions:
+              - key: cloud.google.com/gke-nodepool
+                operator: In
+                values:
+                - g4-standard-48-g4-pool
+      tolerations:
+      - key: nvidia.com/gpu
+        operator: Equal
+        value: "present"
+        effect: NoSchedule
+      containers:
+      - name: run-nvidia-smi-container
+        image: nvidia/cuda:13.0.0-base-ubuntu24.04
+        command:
+        - "nvidia-smi"
+        
+        resources:
+          limits:
+            # GPUs should only be specified as limits
+            # https://kubernetes.io/docs/tasks/manage-gpus/scheduling-gpus/
+            nvidia.com/gpu: 1
+          requests:
+            # cpu request attempts full node per pod
+            cpu: 570m
+      restartPolicy: Never
+  backoffLimit: 0
