@@ -29,6 +29,12 @@ vars:
   # The GCP Zone used for this deployment.
   zone:
 
+  # The VM shape. See allowed values here: https://cloud.google.com/compute/docs/gpus#rtx-6000-gpus
+  machine_type:
+
+  # Number of GPUS in the VM. Can be found here: https://cloud.google.com/compute/docs/gpus#rtx-6000-gpus
+  num_gpus:
+
   # The number of nodes to be created.
   static_node_count:
 
@@ -37,7 +43,6 @@ vars:
   authorized_cidr:
 
   system_node_pool_disk_size_gb: 100
-  k8s_service_account_name: workload-identity-k8s-sa
 
 deployment_groups:
 - group: primary
@@ -152,13 +157,13 @@ deployment_groups:
     source: modules/compute/gke-node-pool
     use: [g4-cluster, node_pool_service_account]
     settings:
-      machine_type: g4-standard-48
+      machine_type: $(vars.machine_type)
       auto_upgrade: true
       zones: [$(vars.zone)]
       static_node_count: $(vars.static_node_count)
       guest_accelerator:
       - type: nvidia-rtx-pro-6000
-        count: 1
+        count: $(vars.num_gpus)
         gpu_driver_installation_config:
           gpu_driver_version: LATEST # TODO: Move to a fixed GPU driver version.
       additional_networks:
@@ -197,5 +202,5 @@ deployment_groups:
       - nvidia-smi
       node_count: $(vars.static_node_count)
       name: run-nvidia-smi
-      k8s_service_account_name: $(vars.k8s_service_account_name)
+      k8s_service_account_name: workload-identity-k8s-sa
     outputs: [instructions]

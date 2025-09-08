@@ -24,13 +24,19 @@ vars:
 
   # This should be unique across all of your Cluster
   # Toolkit Deployments.
-  deployment_name: poornima-g4-12
+  deployment_name: poornima-g4-13
 
   # The GCP Region used for this deployment.
   region: us-central1
 
   # The GCP Zone used for this deployment.
   zone: us-central1-b
+
+  # The VM shape. See allowed values here: https://cloud.google.com/compute/docs/gpus#rtx-6000-gpus
+  machine_type: g4-standard-48
+
+  # Number of GPUS in the VM. Can be found here: https://cloud.google.com/compute/docs/gpus#rtx-6000-gpus
+  num_gpus: 1
 
   # The number of nodes to be created
   static_node_count: 2
