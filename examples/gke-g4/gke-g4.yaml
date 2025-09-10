@@ -19,8 +19,7 @@ vars:
   # Your GCP Project ID
   project_id:
 
-  # This should be unique across all of your Cluster
-  # Toolkit Deployments.
+  # This should be unique across all of your Cluster Toolkit Deployments.
   deployment_name: gke-g4
 
   # The GCP Region used for this deployment.

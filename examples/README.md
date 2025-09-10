@@ -49,6 +49,8 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [gke-a3-ultragpu.yaml](#gke-a3-ultragpuyaml-) ![core-badge]
   * [gke-a3-megagpu](#gke-a3-megagpuyaml-) ![core-badge]
   * [gke-a3-highgpu](#gke-a3-highgpuyaml-) ![core-badge]
+  * [gke-h4d](#gke-h4d-) ![core-badge]
+  * [gke-g4](#gke-g4-) ![core-badge]
   * [gke-consumption-options](#gke-consumption-options-) ![core-badge]
   * [htc-slurm.yaml](#htc-slurmyaml-) ![community-badge]
   * [htc-htcondor.yaml](#htc-htcondoryaml--) ![community-badge] ![experimental-badge]
@@ -60,8 +62,6 @@ md_toc github examples/README.md | sed -e "s/\s-\s/ * /"
   * [tutorial-fluent.yaml](#tutorial-fluentyaml--) ![community-badge] ![experimental-badge]
   * [gke-tpu-v6](#gke-tpu-v6--) ![community-badge] ![experimental-badge]
   * [xpk-n2-filestore](#xpk-n2-filestore--) ![community-badge] ![experimental-badge]
-  * [gke-h4d](#gke-h4d-) ![core-badge]
-  * [gke-g4](#gke-g4-) ![core-badge]
 * [Blueprint Schema](#blueprint-schema)
 * [Writing an HPC Blueprint](#writing-an-hpc-blueprint)
   * [Blueprint Boilerplate](#blueprint-boilerplate)
@@ -1312,6 +1312,18 @@ If you see an error saying: `local-exec provisioner error` or `This environment 
 
 [gke-a3-highgpu.yaml]: ../examples/gke-a3-highgpu.yaml
 
+### [gke-h4d] ![core-badge]
+
+This blueprint uses GKE to provision a Kubernetes cluster and a H4D node pool, along with networks and service accounts. Information about H4D machines can be found [here](https://cloud.google.com/blog/products/compute/new-h4d-vms-optimized-for-hpc). The deployment instructions can be found in the [README](/examples/gke-h4d/README.md).
+
+[gke-h4d]: ../examples/gke-h4d
+
+### [gke-g4] ![core-badge]
+
+This blueprint uses GKE to provision a Kubernetes cluster and a G4 node pool, along with networks and service accounts. Information about G4 machines can be found [here](https://cloud.google.com/blog/products/compute/introducing-g4-vm-with-nvidia-rtx-pro-6000). The deployment instructions can be found in the [README](/examples/gke-g4/README.md).
+
+[gke-g4]: ../examples/gke-g4
+
 ### [gke-consumption-options] ![core-badge]
 
 This folder holds multiple GKE blueprint examples that display different consumption options on GKE.
@@ -1483,18 +1495,6 @@ python3 xpk.py info --cluster xpk-01
 ```
 
 [xpk-n2-filestore]: ../community/examples/xpk-n2-filestore/xpk-n2-filestore.yaml
-
-### [gke-h4d] ![core-badge]
-
-This blueprint uses GKE to provision a Kubernetes cluster and a H4D node pool, along with networks and service accounts. Information about H4D machines can be found [here](https://cloud.google.com/blog/products/compute/new-h4d-vms-optimized-for-hpc). The deployment instructions can be found in the [README](/examples/gke-h4d/README.md).
-
-[gke-h4d]: ../examples/gke-h4d
-
-### [gke-g4] ![core-badge]
-
-This blueprint uses GKE to provision a Kubernetes cluster and a G4 node pool, along with networks and service accounts. Information about G4 machines can be found [here](https://cloud.google.com/blog/products/compute/introducing-g4-vm-with-nvidia-rtx-pro-6000). The deployment instructions can be found in the [README](/examples/gke-g4/README.md).
-
-[gke-g4]: ../examples/gke-g4
 
 ## Blueprint Schema
 
