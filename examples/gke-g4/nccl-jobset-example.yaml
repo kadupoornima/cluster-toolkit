@@ -43,7 +43,7 @@ spec:
             activeDeadlineSeconds: 3600
             restartPolicy: Never
             nodeSelector:
-              cloud.google.com/gke-nodepool: g4-standard-384-g4-pool
+              cloud.google.com/gke-nodepool: g4-standard-48-g4-pool
             tolerations:
             - key: "nvidia.com/gpu"
               operator: "Exists"
@@ -201,6 +201,6 @@ spec:
                 mountPath: /dev/shm
               resources:
                 limits:
-                  nvidia.com/gpu: 8
+                  nvidia.com/gpu: 1
                 requests:
-                  nvidia.com/gpu: 8
+                  nvidia.com/gpu: 1
