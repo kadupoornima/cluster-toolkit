@@ -193,7 +193,7 @@ deployment_groups:
         path: $(vars.gib_installer_path)
         template_vars:
           version: v1.1.0
-          accelerator_count: $(vars.accelerator_count)
+          accelerator_count: $(vars.num_gpus)
       jobset:
         install: true
 

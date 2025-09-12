@@ -80,8 +80,8 @@ spec:
                 apk add --no-cache bash  # Install bash
                 /bin/bash -c "set -ex
                 NUM_GPUS=$(/usr/local/nvidia/bin/nvidia-smi --query-gpu=driver_version --format=csv,noheader,nounits | wc -l)
-                if [ \${NUM_GPUS} -lt 8 ]; then
-                  echo \"Error: Only \${NUM_GPUS} GPUs and expected 8\"
+                if [ \${NUM_GPUS} -lt 1 ]; then
+                  echo \"Error: Only \${NUM_GPUS} GPUs and expected 1\"
                   exit 1
                 fi
                 gpu_errors=(\$(/usr/local/nvidia/bin/nvidia-smi --query-gpu=ecc.errors.uncorrected.volatile.total --format=csv,noheader,nounits))
