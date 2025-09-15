@@ -63,6 +63,7 @@ deployment_groups:
     source: modules/scripts/startup-script
     settings:
       install_ansible: true
+      enable_gpu_network_wait_online: true
       configure_ssh_host_patterns:
       - 10.0.0.*
       - 10.1.0.*
@@ -142,7 +143,7 @@ deployment_groups:
           apt-get install -y git
           ansible-galaxy role install googlecloudplatform.google_cloud_ops_agents
           ansible-pull \
-              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C 6.10.2 \
+              -U https://github.com/GoogleCloudPlatform/slurm-gcp -C 6.10.6 \
               -i localhost, --limit localhost --connection=local \
               -e @/var/tmp/slurm_vars.json \
               ansible/playbook.yml

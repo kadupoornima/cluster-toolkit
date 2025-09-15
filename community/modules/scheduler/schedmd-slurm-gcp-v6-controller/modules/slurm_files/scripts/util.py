@@ -1694,6 +1694,17 @@ class Lookup:
         nodeset = self.node_nodeset_name(node_name)
         return self.cfg.nodeset_dyn.get(nodeset) is not None
 
+    def node_is_gke(self, node_name=None) -> bool:
+        template_info = self.node_template_info(node_name)
+        return self.template_is_gke(template_info)
+
+    def nodeset_is_gke(self, nodeset=None) -> bool:
+        template_info = self.template_info(nodeset.instance_template)
+        return self.template_is_gke(template_info)
+
+    def template_is_gke(self, template_info=None) -> bool:
+        return "goog-gke-node" in template_info.labels
+
     def node_template(self, node_name=None) -> str:
         """ Self link of nodeset template """
         return self.node_nodeset(node_name).instance_template
@@ -2212,5 +2223,7 @@ def update_config(cfg: NSDict) -> None:
     _lkp = Lookup(cfg)
 
 def scontrol_reconfigure(lkp: Lookup) -> None:
+    log.info("Running systemctl restart slurmctld.service")
+    run("sudo systemctl restart slurmctld.service", timeout=30)
     log.info("Running scontrol reconfigure")
     run(f"{lkp.scontrol} reconfigure")

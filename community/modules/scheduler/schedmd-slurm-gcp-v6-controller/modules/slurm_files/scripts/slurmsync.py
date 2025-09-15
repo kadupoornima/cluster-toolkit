@@ -242,6 +242,9 @@ def get_node_action(nodename: str) -> NodeAction:
     lkp = lookup()
     state = lkp.node_state(nodename)
 
+    if lkp.node_is_gke(nodename):
+        return NodeActionUnchanged()
+
     if lkp.node_is_fr(nodename):
         fr = lkp.future_reservation(lkp.node_nodeset(nodename))
         assert fr
@@ -276,6 +279,8 @@ def get_node_action(nodename: str) -> NodeAction:
         if state.base != "DOWN" and not power_flags:
             return NodeActionDown(reason="Unbacked instance")
         if state.base == "DOWN" and not power_flags:
+            return NodeActionPowerDown()
+        if "NOT_RESPONDING" in state.flags:
             return NodeActionPowerDown()
         if "POWERED_DOWN" in state.flags and lkp.is_static_node(nodename):
             return NodeActionPowerUp()
