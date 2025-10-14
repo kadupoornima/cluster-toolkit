@@ -15,7 +15,7 @@
 terraform_backend_defaults:
   type: gcs
   configuration:
-    # The GCS bucket used for storing terraform state
+    # The GCS bucket used for storing terraform stateddd
     bucket:
 
 vars:
