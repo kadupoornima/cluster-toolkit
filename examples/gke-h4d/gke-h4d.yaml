@@ -36,6 +36,12 @@ vars:
   # The following line must be updated for this example to work.
   authorized_cidr:
 
+  # The name of the compute engine reservation in the form of
+  # <reservation-name>
+  # To target a BLOCK_NAME, the name of the extended reservation
+  # can be inputted as <reservation-name>/reservationBlocks/<reservation-block-name>
+  reservation:
+
   system_node_pool_disk_size_gb: 100
   h4d_node_pool_disk_size_gb: 100
 
@@ -115,7 +121,6 @@ deployment_groups:
       system_node_pool_taints: []
       enable_multi_networking: true
       enable_dcgm_monitoring: true
-      gcp_public_cidrs_access_enabled: false
       enable_private_endpoint: false # Allows access from authorized public IPs
       configure_workload_identity_sa: true
       master_authorized_networks:
@@ -156,6 +161,27 @@ deployment_groups:
       zones: [$(vars.zone)]
       disk_size_gb: $(vars.h4d_node_pool_disk_size_gb)
       static_node_count: $(vars.static_node_count)
+      reservation_affinity:
+        consume_reservation_type: SPECIFIC_RESERVATION
+        specific_reservations:
+        - name: $(vars.reservation)
+      taints:
+      # (Optional, but suggested)
+      # In order prevent scheduling of generic workloads onto the H4D nodepool,
+      # we suggest a Kubernetes taint. In order to schedule workloads, add the following
+      # tolerance to a PodSpec that you want to allow to use the H4D nodes. See
+      # https://kubernetes.io/docs/concepts/scheduling-eviction/taint-and-toleration/ for
+      # details
+      # tolerations:
+      # - key: "node-type"
+      #   operator: "Equal"
+      #   value: "h4d"
+      #   effect: "NoSchedule"
+      - key: node-type
+        value: h4d
+        effect: NO_SCHEDULE
+      placement_policy:
+        type: COMPACT
       additional_networks:
         $(concat(
           [{
@@ -182,3 +208,47 @@ deployment_groups:
         install: true
       jobset:
         install: true
+      apply_manifests:
+      - source: "https://raw.githubusercontent.com/kubeflow/mpi-operator/v0.6.0/deploy/v2beta1/mpi-operator.yaml"
+        server_side_apply: true
+
+  # Filestore
+  - id: filestore
+    source: modules/file-system/filestore
+    use: [gke-h4d-net]
+    settings: {local_mount: /mnt/h4d-filestore}
+
+  - id: shared-filestore-pv
+    source: modules/file-system/gke-persistent-volume
+    use: [h4d-cluster, filestore]
+
+  # Shared Filestore Job
+  - id: shared-fs-job
+    source: modules/compute/gke-job-template
+    use:
+    - h4d-cluster
+    - h4d-pool
+    - shared-filestore-pv
+    settings:
+      image: alpine/git:latest
+      command:
+      - sh
+      - -c
+      - |
+        echo "Pod ${HOSTNAME} is starting..."
+        SHARED_DIR=/mnt/h4d-filestore
+        mkdir -p $SHARED_DIR
+        cd $SHARED_DIR
+
+        # Simulate some work and write to a shared file
+        cmd="date +%s"
+        TIMESTAMP=`$cmd`
+        echo "Pod ${HOSTNAME} writing data at $$TIMESTAMP" >> shared_output.txt
+        echo "Displaying content of shared_output.txt:"
+        echo "---"
+        cat shared_output.txt # Read the content to show it's shared
+        echo "---"
+        sleep 120
+        echo "Pod ${HOSTNAME} finished."
+      node_count: 2
+    outputs: [instructions]

@@ -226,6 +226,9 @@ resource "google_container_cluster" "gke_cluster" {
     ray_operator_config {
       enabled = var.enable_ray_operator
     }
+    lustre_csi_driver_config {
+      enabled = var.enable_managed_lustre_csi
+    }
   }
 
   timeouts {
@@ -390,7 +393,7 @@ provider "kubernetes" {
 module "workload_identity" {
   count   = var.configure_workload_identity_sa ? 1 : 0
   source  = "terraform-google-modules/kubernetes-engine/google//modules/workload-identity"
-  version = "~> 34.0"
+  version = ">= 40.0"
 
   use_existing_gcp_sa = true
   name                = var.k8s_service_account_name

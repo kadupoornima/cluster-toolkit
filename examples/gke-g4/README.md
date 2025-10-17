@@ -1,6 +1,9 @@
 # GKE G4 Blueprint
 
-This blueprint uses GKE to provision a Kubernetes cluster and a G4 node pool, along with networks and service accounts. Information about the G4 machines can be found [here](https://cloud.google.com/blog/products/compute/introducing-g4-vm-with-nvidia-rtx-pro-6000).
+This blueprint uses GKE to provision a Kubernetes cluster and a G4 node pool, along with networks and service accounts. More information about G4 machines can be found here:
+
+* [Blog post](https://cloud.google.com/blog/products/compute/introducing-g4-vm-with-nvidia-rtx-pro-6000)
+* [Documentation](https://cloud.google.com/compute/docs/gpus#rtx-6000-gpus)
 
 > **_NOTE:_** The required GKE version for G4 support is >= 1.32.4-gke.1698000.
 
@@ -26,6 +29,8 @@ This blueprint uses GKE to provision a Kubernetes cluster and a G4 node pool, al
     1. `deployment_name`: Name of the deployment.
     1. `region`: Compute region used for the deployment.
     1. `zone`: Compute zone used for the deployment.
+    1. `machine_type`: The VM shape. See allowed values at https://cloud.google.com/compute/docs/gpus#rtx-6000-gpus.
+    1. `num_gpus`: Number of GPUS in the VM. Can be found at https://cloud.google.com/compute/docs/gpus#rtx-6000-gpus.
     1. `static_node_count`: Number of nodes to create.
     1. `authorized_cidr`: update the IP address in `<your-ip-address>/32`.
 1. Build the Cluster Toolkit binary

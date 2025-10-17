@@ -1694,6 +1694,12 @@ class Lookup:
         nodeset = self.node_nodeset_name(node_name)
         return self.cfg.nodeset_dyn.get(nodeset) is not None
 
+    def node_is_gke(self, node_name=None) -> bool:
+        return self.nodeset_is_gke(self.node_nodeset(node_name))
+
+    def nodeset_is_gke(self, nodeset=None) -> bool:
+        return "gke_nodepool" in nodeset
+
     def node_template(self, node_name=None) -> str:
         """ Self link of nodeset template """
         return self.node_nodeset(node_name).instance_template
@@ -1887,7 +1893,7 @@ class Lookup:
             policies=policies,
             deployment_type=reservation.get("deploymentType"),
             reservation_mode=reservation.get("reservationMode"),
-            assured_count=reservation.get("assuredCount") if reservation.get("assuredCount") else 0,
+            assured_count=int(reservation.get("specificReservation", {}).get("assuredCount", 0)),
             delete_at_time=parse_gcp_timestamp(reservation.get("deleteAtTime")) if reservation.get("deleteAtTime") else None,
             bulk_insert_name=bulk_insert_name)
 
@@ -2212,5 +2218,7 @@ def update_config(cfg: NSDict) -> None:
     _lkp = Lookup(cfg)
 
 def scontrol_reconfigure(lkp: Lookup) -> None:
+    log.info("Running systemctl restart slurmctld.service")
+    run("sudo systemctl restart slurmctld.service", timeout=30)
     log.info("Running scontrol reconfigure")
     run(f"{lkp.scontrol} reconfigure")
