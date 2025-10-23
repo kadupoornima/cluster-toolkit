@@ -92,6 +92,7 @@ deployment_groups:
               - nvidia-compute-utils-*-server
               - nvidia-fabricmanager-*
               - nvidia-utils-*-server
+              - nvidia-imex-*
             tasks:
             - name: Hold nvidia packages
               ansible.builtin.command:
@@ -143,6 +144,7 @@ deployment_groups:
           add-nvidia-repositories -y
           apt install -y cuda-toolkit-12-8
           apt install -y datacenter-gpu-manager-4-cuda12
+          apt install -y datacenter-gpu-manager-4-dev
       - type: ansible-local
         destination: settings_nvidia_dcgm.yml
         content: |
