@@ -87,7 +87,7 @@ module "kubectl_apply_manifests" {
 module "install_kueue" {
   source           = "./helm_install"
   count            = local.install_kueue ? 1 : 0
-  wait             = false
+  wait             = true
   timeout          = 1200
   release_name     = "kueue"
   chart_repository = "oci://registry.k8s.io/kueue/charts"
@@ -119,7 +119,7 @@ module "configure_kueue" {
 module "install_jobset" {
   source           = "./helm_install"
   count            = local.install_jobset ? 1 : 0
-  wait             = false
+  wait             = true
   timeout          = 1200
   release_name     = "jobset"
   chart_repository = "oci://registry.k8s.io/jobset/charts"
