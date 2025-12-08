@@ -325,8 +325,10 @@ resource "google_compute_instance" "compute_vm" {
     precondition {
       condition = !contains([
         "c3-:pd-standard",
+        "c3d:pd-standard",
         "h3-:pd-standard",
         "h3-:pd-ssd",
+        "t2a:pd-standard",
       ], "${substr(var.machine_type, 0, 3)}:${var.disk_type}")
       error_message = "A disk_type=${var.disk_type} cannot be used with machine_type=${var.machine_type}."
     }
