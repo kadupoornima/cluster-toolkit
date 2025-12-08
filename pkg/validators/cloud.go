@@ -71,6 +71,23 @@ func handleServiceUsageError(err error, pid string) error {
 	return fmt.Errorf("unhandled error: %s", herr)
 }
 
+// chunkSlice splits a slice into chunks of a given size
+func chunkSlice(slice []string, chunkSize int) [][]string {
+	chunks := make([][]string, 0)
+	for i := 0; i < len(slice); i += chunkSize {
+		end := i + chunkSize
+
+		// necessary check to avoid slicing beyond slice capacity
+		if end > len(slice) {
+			end = len(slice)
+		}
+
+		chunks = append(chunks, slice[i:end])
+	}
+
+	return chunks
+}
+
 // TestApisEnabled tests whether APIs are enabled in given project
 func TestApisEnabled(projectID string, requiredAPIs []string) error {
 	// can return immediately if there are 0 APIs to test
@@ -91,14 +108,20 @@ func TestApisEnabled(projectID string, requiredAPIs []string) error {
 		serviceNames = append(serviceNames, prefix+"/services/"+api)
 	}
 
-	resp, err := s.Services.BatchGet(prefix).Names(serviceNames...).Do()
-	if err != nil {
-		return handleServiceUsageError(err, projectID)
-	}
+	// BatchGet has a limit of 30 services per request
+	// https://cloud.google.com/service-usage/docs/reference/rest/v1/services/batchGet
+	batches := chunkSlice(serviceNames, 30)
+
 	errs := config.Errors{}
-	for _, service := range resp.Services {
-		if service.State == "DISABLED" {
-			errs.Add(newDisabledServiceError(service.Config.Title, service.Config.Name, projectID))
+	for _, batch := range batches {
+		resp, err := s.Services.BatchGet(prefix).Names(batch...).Do()
+		if err != nil {
+			return handleServiceUsageError(err, projectID)
+		}
+		for _, service := range resp.Services {
+			if service.State == "DISABLED" {
+				errs.Add(newDisabledServiceError(service.Config.Title, service.Config.Name, projectID))
+			}
 		}
 	}
 	return errs.OrNil()
