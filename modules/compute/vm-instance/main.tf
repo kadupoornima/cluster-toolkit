@@ -325,6 +325,7 @@ resource "google_compute_instance" "compute_vm" {
     precondition {
       condition = !contains([
         "c3-:pd-standard",
+        "c3d:pd-standard",
         "h3-:pd-standard",
         "h3-:pd-ssd",
       ], "${substr(var.machine_type, 0, 3)}:${var.disk_type}")
