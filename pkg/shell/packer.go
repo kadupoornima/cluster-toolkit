@@ -36,6 +36,21 @@ func ConfigurePacker() error {
 	return nil
 }
 
+// PackerVersion returns the version of the installed packer binary
+func PackerVersion() (string, error) {
+	path, err := exec.LookPath("packer")
+	if err != nil {
+		return "", err
+	}
+	// Packer version output is not JSON friendly in older versions, but `packer version` usually works.
+	// `packer version` output: "Packer v1.7.0"
+	out, err := exec.Command(path, "version").Output()
+	if err != nil {
+		return "", err
+	}
+	return string(bytes.TrimSpace(out)), nil
+}
+
 // ExecPackerCmd runs packer with arguments in the given working directory
 // optionally prints to stdout/stderr
 func ExecPackerCmd(workingDir string, printToScreen bool, args ...string) error {
