@@ -50,9 +50,14 @@ variable "zone" {
 }
 
 variable "size_gb" {
-  description = "Storage size of the parallelstore instance in GB."
+  description = "Storage size of the parallelstore instance in GB. Must be at least 12000."
   type        = number
   default     = 12000
+
+  validation {
+    condition     = var.size_gb >= 12000
+    error_message = "Parallelstore instance size must be at least 12000 GB."
+  }
 }
 
 variable "labels" {

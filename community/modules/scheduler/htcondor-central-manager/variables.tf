@@ -81,10 +81,15 @@ variable "network_storage" {
 }
 
 variable "disk_size_gb" {
-  description = "Boot disk size in GB"
+  description = "Boot disk size in GB. Must be at least 10."
   type        = number
   default     = 20
   nullable    = false
+
+  validation {
+    condition     = var.disk_size_gb >= 10
+    error_message = "Disk size must be at least 10 GB."
+  }
 }
 
 variable "metadata" {
