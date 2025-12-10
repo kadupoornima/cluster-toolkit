@@ -82,6 +82,7 @@ deployment_groups:
       network_routing_mode: REGIONAL
       enable_cloud_router: false
       enable_cloud_nat: false
+      enable_internal_traffic: false
       subnetworks:
       - subnet_name: $(vars.deployment_name)-rdma-sub
         subnet_region: $(vars.region)
