@@ -83,7 +83,7 @@ variable "mtu" {
 
   validation {
     condition     = var.mtu == 0 || (var.mtu >= 1300 && var.mtu <= 8896)
-    error_message = "MTU must be 0 or between 1300 and 8896."
+    error_message = "MTU must be 0 (default) or between 1300 and 8896 (valid range for Google Cloud VPC)."
   }
 }
 

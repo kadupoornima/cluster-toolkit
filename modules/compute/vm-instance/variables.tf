@@ -60,7 +60,7 @@ variable "disk_type" {
       "pd-standard", "pd-balanced", "pd-ssd", "pd-extreme",
       "hyperdisk-balanced", "hyperdisk-throughput", "hyperdisk-extreme", "hyperdisk-ml"
     ], var.disk_type)
-    error_message = "Disk type must be one of 'pd-standard', 'pd-balanced', 'pd-ssd', 'pd-extreme', 'hyperdisk-balanced', 'hyperdisk-throughput', 'hyperdisk-extreme', 'hyperdisk-ml'."
+    error_message = "Disk type must be one of the supported Google Cloud persistent disk or hyperdisk types: 'pd-standard', 'pd-balanced', 'pd-ssd', 'pd-extreme', 'hyperdisk-balanced', 'hyperdisk-throughput', 'hyperdisk-extreme', 'hyperdisk-ml'."
   }
 }
 
@@ -83,7 +83,7 @@ variable "local_ssd_interface" {
 
   validation {
     condition     = contains(["NVME", "SCSI"], var.local_ssd_interface)
-    error_message = "Local SSD interface must be 'NVME' or 'SCSI'."
+    error_message = "Local SSD interface must be 'NVME' or 'SCSI' as supported by GCE."
   }
 }
 
@@ -369,7 +369,7 @@ variable "provisioning_model" {
 
   validation {
     condition     = var.provisioning_model == null || contains(["STANDARD", "SPOT"], coalesce(var.provisioning_model, "STANDARD"))
-    error_message = "Provisioning model must be 'STANDARD' or 'SPOT'."
+    error_message = "Provisioning model must be 'STANDARD' or 'SPOT'. SPOT replaces the deprecated 'spot' boolean."
   }
 }
 

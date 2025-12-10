@@ -88,7 +88,7 @@ variable "disk_size_gb" {
 
   validation {
     condition     = var.disk_size_gb >= 10
-    error_message = "Disk size must be at least 10 GB."
+    error_message = "Disk size must be at least 10 GB to support standard OS images."
   }
 }
 

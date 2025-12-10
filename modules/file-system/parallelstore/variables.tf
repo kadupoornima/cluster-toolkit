@@ -56,7 +56,7 @@ variable "size_gb" {
 
   validation {
     condition     = var.size_gb >= 12000
-    error_message = "Parallelstore instance size must be at least 12000 GB."
+    error_message = "Parallelstore instance size must be at least 12000 GB. The Parallelstore service requires a minimum capacity of 12TB."
   }
 }
 
