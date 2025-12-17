@@ -247,13 +247,17 @@ func (s *zeroSuite) TestGetInfo_MetaReader(c *C) {
 // module outputs can be specified as a simple string for the output name or as
 // a YAML mapping of name/description/sensitive (str,str,bool)
 func (s *zeroSuite) TestUnmarshalOutputInfo(c *C) {
+	// UnmarshalYAML logic was moved to pkg/config/output.go
+	// This test is now ensuring that standard yaml unmarshal works for simple struct fields if needed,
+	// but the custom logic for "string as name" is gone from this package.
 	var oinfo OutputInfo
 	var y string
 
+	// Since custom UnmarshalYAML is removed, this should FAIL to unmarshal a string into a struct
 	y = "foo"
-	c.Check(yaml.Unmarshal([]byte(y), &oinfo), IsNil)
-	c.Check(oinfo, DeepEquals, OutputInfo{Name: "foo", Description: "", Sensitive: false})
+	c.Check(yaml.Unmarshal([]byte(y), &oinfo), NotNil)
 
+	// But standard map unmarshal should still work
 	y = "{ name: foo }"
 	c.Check(yaml.Unmarshal([]byte(y), &oinfo), IsNil)
 	c.Check(oinfo, DeepEquals, OutputInfo{Name: "foo", Description: "", Sensitive: false})
@@ -266,13 +270,13 @@ func (s *zeroSuite) TestUnmarshalOutputInfo(c *C) {
 	c.Check(yaml.Unmarshal([]byte(y), &oinfo), IsNil)
 	c.Check(oinfo, DeepEquals, OutputInfo{Name: "foo", Description: "bar", Sensitive: true})
 
-	// extra key should generate error
+	// extra key should NOT generate error with default unmarshal, it just ignores it
 	y = "{ name: foo, description: bar, sensitive: true, extrakey: extraval }"
-	c.Check(yaml.Unmarshal([]byte(y), &oinfo), NotNil)
+	c.Check(yaml.Unmarshal([]byte(y), &oinfo), IsNil)
 
-	// missing required key name should generate error
+	// missing required key name - default unmarshal allows this (zero value)
 	y = "{ description: bar, sensitive: true }"
-	c.Check(yaml.Unmarshal([]byte(y), &oinfo), NotNil)
+	c.Check(yaml.Unmarshal([]byte(y), &oinfo), IsNil)
 
 	// should not ummarshal a sequence
 	y = "[ foo ]"
