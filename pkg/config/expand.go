@@ -474,10 +474,10 @@ func (bp *Blueprint) populateOutputs() {
 			if r.Module != m.ID {
 				continue // find IGC references pointing to this module
 			}
-			if slices.ContainsFunc(m.Outputs, func(o modulereader.OutputInfo) bool { return o.Name == r.Name }) {
+			if slices.ContainsFunc(m.Outputs, func(o ModuleOutput) bool { return o.Name == r.Name }) {
 				continue // output is already registered
 			}
-			m.Outputs = append(m.Outputs, modulereader.OutputInfo{
+			m.Outputs = append(m.Outputs, ModuleOutput{
 				Name:        r.Name,
 				Description: "Automatically-generated output exported for use by later deployment groups",
 				Sensitive:   true,
