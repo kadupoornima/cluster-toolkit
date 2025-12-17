@@ -158,21 +158,21 @@ func (s *zeroSuite) TestValidateOutputs(c *C) {
 	}
 
 	{ // Output matches between varInfo and module
-		out := modulereader.OutputInfo{Name: "velvet"}
+		out := Output{Name: "velvet"}
 		mod := Module{
-			Outputs: []modulereader.OutputInfo{out}}
+			Outputs: []Output{out}}
 		info := modulereader.ModuleInfo{
-			Outputs: []modulereader.OutputInfo{out}}
+			Outputs: []modulereader.OutputInfo{{Name: "velvet"}}}
 		c.Check(validateOutputs(p, mod, info), IsNil)
 	}
 
 	{ // Addition output found in modules, not in varinfo
-		out := modulereader.OutputInfo{Name: "velvet"}
-		tuo := modulereader.OutputInfo{Name: "waldo"}
+		out := Output{Name: "velvet"}
+		tuo := Output{Name: "waldo"}
 		mod := Module{
-			Outputs: []modulereader.OutputInfo{out, tuo}}
+			Outputs: []Output{out, tuo}}
 		info := modulereader.ModuleInfo{
-			Outputs: []modulereader.OutputInfo{out}}
+			Outputs: []modulereader.OutputInfo{{Name: "velvet"}}}
 		c.Check(validateOutputs(p, mod, info), NotNil)
 	}
 }
