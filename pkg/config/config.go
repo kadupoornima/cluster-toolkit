@@ -233,7 +233,7 @@ type Module struct {
 	Kind     ModuleKind
 	ID       ModuleID
 	Use      ModuleIDs                 `yaml:"use,omitempty"`
-	Outputs  []modulereader.OutputInfo `yaml:"outputs,omitempty"`
+	Outputs  []OutputInfo              `yaml:"outputs,omitempty"`
 	Settings Dict                      `yaml:"settings,omitempty"`
 	// DEPRECATED fields, keep in the struct for backwards compatibility
 	RequiredApis     interface{} `yaml:"required_apis,omitempty"`
