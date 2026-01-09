@@ -123,7 +123,7 @@ No modules.
 | <a name="input_create_boot_snapshot_before_destroy"></a> [create\_boot\_snapshot\_before\_destroy](#input\_create\_boot\_snapshot\_before\_destroy) | Whether to create a snapshot before destroying the boot disk | `bool` | `false` | no |
 | <a name="input_create_snapshot_before_destroy"></a> [create\_snapshot\_before\_destroy](#input\_create\_snapshot\_before\_destroy) | Whether to create a snapshot before destroying the NFS data disk | `bool` | `false` | no |
 | <a name="input_deployment_name"></a> [deployment\_name](#input\_deployment\_name) | Name of the HPC deployment, used as name of the NFS instance if no name is specified. | `string` | n/a | yes |
-| <a name="input_disk_size"></a> [disk\_size](#input\_disk\_size) | Storage size in GB for the NFS data disk | `number` | `"100"` | no |
+| <a name="input_disk_size"></a> [disk\_size](#input\_disk\_size) | Storage size in GB for the NFS data disk. Must be >= 10. | `number` | `"100"` | no |
 | <a name="input_image"></a> [image](#input\_image) | DEPRECATED: The VM image used by the NFS server | `string` | `null` | no |
 | <a name="input_instance_image"></a> [instance\_image](#input\_instance\_image) | The VM image used by the NFS server.<br/><br/>Expected Fields:<br/>name: The name of the image. Mutually exclusive with family.<br/>family: The image family to use. Mutually exclusive with name.<br/>project: The project where the image is hosted. | `map(string)` | <pre>{<br/>  "family": "hpc-rocky-linux-8",<br/>  "project": "cloud-hpc-image-public"<br/>}</pre> | no |
 | <a name="input_labels"></a> [labels](#input\_labels) | Labels to add to the NFS instance. Key-value pairs. | `map(string)` | n/a | yes |
@@ -138,7 +138,7 @@ No modules.
 | <a name="input_scopes"></a> [scopes](#input\_scopes) | Scopes to apply to the controller | `list(string)` | <pre>[<br/>  "https://www.googleapis.com/auth/cloud-platform"<br/>]</pre> | no |
 | <a name="input_service_account"></a> [service\_account](#input\_service\_account) | Service Account for the NFS server | `string` | `null` | no |
 | <a name="input_subnetwork_self_link"></a> [subnetwork\_self\_link](#input\_subnetwork\_self\_link) | The self link of the subnetwork to attach the NFS VM. | `string` | `null` | no |
-| <a name="input_type"></a> [type](#input\_type) | Storage type for the NFS data disk | `string` | `"pd-ssd"` | no |
+| <a name="input_type"></a> [type](#input\_type) | Storage type for the NFS data disk. Allowed values are "pd-standard", "pd-balanced", "pd-ssd", "pd-extreme", "hyperdisk-balanced", "hyperdisk-extreme", "hyperdisk-throughput". | `string` | `"pd-ssd"` | no |
 | <a name="input_zone"></a> [zone](#input\_zone) | The zone name where the NFS instance located in. | `string` | n/a | yes |
 
 ## Outputs
