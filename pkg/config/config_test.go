@@ -79,6 +79,7 @@ func (b *modBuilder) set(s string, val any) *modBuilder {
 func (b *modBuilder) outputs(o ...string) *modBuilder {
 	for _, v := range o {
 		b.i.Outputs = append(b.i.Outputs, modulereader.OutputInfo{Name: v})
+		b.m.Outputs = append(b.m.Outputs, ModuleOutput{Name: v})
 	}
 	return b
 }

@@ -245,9 +245,9 @@ type Module struct {
 	Source   string
 	Kind     ModuleKind
 	ID       ModuleID
-	Use      ModuleIDs                 `yaml:"use,omitempty"`
-	Outputs  []modulereader.OutputInfo `yaml:"outputs,omitempty"`
-	Settings Dict                      `yaml:"settings,omitempty"`
+	Use      ModuleIDs      `yaml:"use,omitempty"`
+	Outputs  []ModuleOutput `yaml:"outputs,omitempty"`
+	Settings Dict           `yaml:"settings,omitempty"`
 	// DEPRECATED fields, keep in the struct for backwards compatibility
 	RequiredApis     interface{} `yaml:"required_apis,omitempty"`
 	WrapSettingsWith interface{} `yaml:"wrapsettingswith,omitempty"`
