@@ -43,6 +43,7 @@ var (
 
 var (
 	annotation = make(map[string]string)
+	version    = "v1.79.0"
 	rootCmd    = &cobra.Command{
 		Use:   "gcluster",
 		Short: "A blueprint and deployment engine for HPC clusters in GCP.",
@@ -52,15 +53,21 @@ var (
 				logging.Fatal("cmd.Help function failed: %s", err)
 			}
 		},
-		Version:     "v1.79.0",
+		PersistentPostRun: func(cmd *cobra.Command, args []string) {
+			addTelemetryEvent("Complete", cmd, args, version)
+		},
+		Version:     version,
 		Annotations: annotation,
 	}
 )
 
 func init() {
 	addColorFlag(rootCmd.PersistentFlags())
+	addTelemetryFlag(rootCmd.PersistentFlags())
 	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
 		initColor()
+		initTelemetry(cmd, args)
+		addTelemetryEvent("Start", cmd, args, version)
 	}
 }
 
