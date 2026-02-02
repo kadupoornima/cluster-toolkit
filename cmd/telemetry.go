@@ -37,34 +37,36 @@ func addTelemetryFlag(flagset *pflag.FlagSet) {
 }
 
 func initTelemetry(cmd *cobra.Command, args []string) {
-	filePath := args[0]
-	// Ensure the temp file is deleted regardless of success/failure
-	defer os.Remove(filePath)
+	if cmd.Flags().Lookup("telemetry").Value.String() == "true" {
+		filePath := args[0]
+		// Ensure the temp file is deleted regardless of success/failure
+		defer os.Remove(filePath)
 
-	data, err := os.ReadFile(filePath)
-	if err != nil {
-		return
-	}
+		data, err := os.ReadFile(filePath)
+		if err != nil {
+			return
+		}
 
-	client := &http.Client{Timeout: 10 * time.Second}
-	req, err := http.NewRequest("POST", "https://play.googleapis.com/log", bytes.NewBuffer(data))
-	if err != nil {
-		return
-	}
+		client := &http.Client{Timeout: 10 * time.Second}
+		req, err := http.NewRequest("POST", "https://play.googleapis.com/log", bytes.NewBuffer(data))
+		if err != nil {
+			return
+		}
 
-	req.Header.Set("Content-Type", "application/json")
-	// Match the User-Agent format used in XPK/gcloud
-	req.Header.Set("User-Agent", "ClusterToolkit/1.0.0")
+		req.Header.Set("Content-Type", "application/json")
+		// Match the User-Agent format used in XPK/gcloud
+		req.Header.Set("User-Agent", "ClusterToolkit/1.0.0")
 
-	// Add required query parameters
-	q := req.URL.Query()
-	q.Add("format", "json_proto")
-	req.URL.RawQuery = q.Encode()
+		// Add required query parameters
+		q := req.URL.Query()
+		q.Add("format", "json_proto")
+		req.URL.RawQuery = q.Encode()
 
-	resp, err := client.Do(req)
-	if err == nil {
-		// Best practice: close body to prevent resource leaks
-		resp.Body.Close()
+		resp, err := client.Do(req)
+		if err == nil {
+			// Best practice: close body to prevent resource leaks
+			resp.Body.Close()
+		}
 	}
 }
 
