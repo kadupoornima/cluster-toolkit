@@ -30,8 +30,8 @@ import (
 
 const (
 	ClearcutURL   = "https://play.googleapis.com/log"
-	LogSourceName = "CONCORD"
-	ClientType    = "GCLUSTER"
+	LogSourceEnum = "113"
+	ClientType    = "CLUSTER_TOOLKIT"
 	configDirName = "cluster-toolkit"
 	idFileName    = "telemetry_id"
 )
@@ -52,6 +52,7 @@ func init() {
 
 // Init sets the enabled state.
 // For 'no-telemetry', pass (!noTelemetry) here.
+// Using a mutex lock to handle race conditions.
 func Init(enabled bool) {
 	collector.mu.Lock()
 	defer collector.mu.Unlock()
@@ -200,7 +201,7 @@ func (c *MetricsCollector) generatePayload() ([]byte, error) {
 
 	logRequest := map[string]interface{}{
 		"client_info":     map[string]string{"client_type": ClientType},
-		"log_source_name": LogSourceName,
+		"log_source_enum": LogSourceEnum,
 		"request_time_ms": time.Now().UnixMilli(),
 		"log_event":       serializedEvents,
 	}
