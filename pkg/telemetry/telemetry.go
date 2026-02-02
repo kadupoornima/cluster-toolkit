@@ -43,11 +43,15 @@ func init() {
 		events:    make([]*MetricsEvent, 0),
 		sessionID: uuid.New().String(),
 		clientID:  getOrGenerateClientID(),
+		// Enabled by default, but overwritten by Init()
+		enabled: true,
 	}
 }
 
 // --- Public Interface ---
 
+// Init sets the enabled state.
+// For 'no-telemetry', pass (!noTelemetry) here.
 func Init(enabled bool) {
 	collector.mu.Lock()
 	defer collector.mu.Unlock()
@@ -60,7 +64,6 @@ func LogStart(command string) {
 	})
 }
 
-// LogComplete captures the exit code and logs the completion event
 func LogComplete(exitCode int) {
 	collector.logEvent("commands", "complete", map[string]string{
 		"exit_code": fmt.Sprintf("%d", exitCode),
@@ -69,18 +72,19 @@ func LogComplete(exitCode int) {
 
 func Flush() {
 	collector.mu.Lock()
+	// Quick check before expensive IO
 	if !collector.enabled || len(collector.events) == 0 {
 		collector.mu.Unlock()
 		return
 	}
 	payload, err := collector.generatePayload()
-	collector.mu.Unlock() // Unlock before expensive IO operations
+	collector.mu.Unlock()
 
 	if err != nil {
 		return
 	}
 
-	// 1. Write payload to a temp file
+	// Write payload to a temp file
 	f, err := os.CreateTemp("", "gcluster-telemetry-*.json")
 	if err != nil {
 		return
@@ -100,8 +104,7 @@ func Flush() {
 		return
 	}
 
-	// 2. Spawn the detached background process
-	// We call the current binary again with the hidden subcommand
+	// Spawn detached process
 	selfExe, err := os.Executable()
 	if err != nil {
 		return

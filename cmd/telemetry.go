@@ -24,8 +24,8 @@ import (
 )
 
 // internalTelemetryCmd represents the hidden telemetry uploader command
-var telemetryCmd = &cobra.Command{
-	Use:    "telemetry",
+var internalTelemetryCmd = &cobra.Command{
+	Use:    "internal-telemetry",
 	Hidden: true, // Crucial: Hide from user help output
 	Args:   cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
@@ -73,5 +73,5 @@ var telemetryCmd = &cobra.Command{
 }
 
 func init() {
-	rootCmd.AddCommand(telemetryCmd)
+	rootCmd.AddCommand(internalTelemetryCmd)
 }

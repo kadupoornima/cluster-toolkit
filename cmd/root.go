@@ -65,6 +65,11 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&noTelemetry, "no-telemetry", false, "Disable usage telemetry (enabled by default).")
 
 	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+		// CRITICAL: Prevent recursive telemetry loops.
+		// The internal uploader command (hidden) must NOT trigger telemetry logic.
+		if cmd.Name() == "internal-telemetry" {
+			return
+		}
 		initColor()
 
 		telemetry.Init(!noTelemetry)
