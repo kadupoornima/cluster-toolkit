@@ -23,6 +23,7 @@ import (
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/shell"
+	"hpc-toolkit/pkg/telemetry"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -57,10 +58,17 @@ var (
 	}
 )
 
+var noTelemetry bool = false
+
 func init() {
 	addColorFlag(rootCmd.PersistentFlags())
+	rootCmd.PersistentFlags().BoolVar(&noTelemetry, "no-telemetry", false, "Disable usage telemetry (enabled by default).")
+
 	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
 		initColor()
+
+		telemetry.Init(!noTelemetry)
+		telemetry.LogStart(cmd.CommandPath())
 	}
 }
 
@@ -96,7 +104,27 @@ Commit info: {{index .Annotations "commitInfo"}}
 		rootCmd.SetVersionTemplate(tmpl)
 	}
 
-	return rootCmd.Execute()
+	// Defer Flush to ensure it runs even if the command panics or fails
+	defer telemetry.Flush()
+
+	err := rootCmd.Execute()
+
+	// 4. Capture Error Code Logic
+	exitCode := 0
+	if err != nil {
+		exitCode = 1 // Default generic error code
+
+		// Attempt to unwrap the specific exit code from the error
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			exitCode = exitErr.ExitCode()
+		}
+	}
+
+	// Log completion with the actual exit code
+	telemetry.LogComplete(exitCode)
+
+	return err
 }
 
 // checkGitHashMismatch will compare the hash of the git repository vs the git
