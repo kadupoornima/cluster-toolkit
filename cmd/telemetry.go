@@ -27,9 +27,9 @@ import (
 var internalTelemetryCmd = &cobra.Command{
 	Use:    "internal-telemetry",
 	Hidden: true, // Crucial: Hide from user help output
-	Args:   cobra.ExactArgs(1),
+	Args:   cobra.ExactArgs(0),
 	Run: func(cmd *cobra.Command, args []string) {
-		filePath := args[0]
+		filePath := "gcluster-telemetry-*.json"
 		defer os.Remove(filePath) // Cleanup the payload file
 
 		// 1. Read the upload configuration
