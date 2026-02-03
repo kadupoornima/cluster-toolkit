@@ -68,6 +68,7 @@ func init() {
 		// CRITICAL: Prevent recursive telemetry loops.
 		// The internal uploader command (hidden) must NOT trigger telemetry logic.
 		if cmd.Name() == "internal-telemetry" {
+			logging.Fatal("Error: This command is not for external use.\nRun 'gcluster --help' for usage.")
 			return
 		}
 		initColor()

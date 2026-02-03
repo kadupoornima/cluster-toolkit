@@ -23,13 +23,13 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// internalTelemetryCmd represents the hidden telemetry uploader command
+// internalTelemetryCmd represents the hidden telemetry uploader command. It is created to separate the telemetry call from the CLI call.
 var internalTelemetryCmd = &cobra.Command{
 	Use:    "internal-telemetry",
 	Hidden: true, // Crucial: Hide from user help output
-	Args:   cobra.ExactArgs(0),
+	Args:   cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
-		filePath := "gcluster-telemetry-*.json"
+		filePath := args[0]
 		defer os.Remove(filePath) // Cleanup the payload file
 
 		// 1. Read the upload configuration
