@@ -44,6 +44,7 @@ var (
 
 var (
 	annotation = make(map[string]string)
+	version    = config.GetToolkitVersion()
 	rootCmd    = &cobra.Command{
 		Use:   "gcluster",
 		Short: "A blueprint and deployment engine for HPC clusters in GCP.",
@@ -53,7 +54,7 @@ var (
 				logging.Fatal("cmd.Help function failed: %s", err)
 			}
 		},
-		Version:     "v1.80.0",
+		Version:     version,
 		Annotations: annotation,
 	}
 )
