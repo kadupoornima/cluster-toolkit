@@ -26,6 +26,7 @@ import (
 	"strings"
 
 	"github.com/agext/levenshtein"
+	"github.com/google/uuid"
 	"github.com/hashicorp/hcl/v2"
 	"github.com/pkg/errors"
 	"github.com/zclconf/go-cty/cty"
@@ -112,7 +113,7 @@ func (g Group) Kind() ModuleKind {
 	return k
 }
 
-// Module return the module with the given ID
+// Module returns the module with the given ID
 func (bp *Blueprint) Module(id ModuleID) (*Module, error) {
 	var mod *Module
 	bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
@@ -951,4 +952,25 @@ func (bp *Blueprint) evalVars() (Dict, error) {
 		res[n] = ev
 	}
 	return NewDict(res), nil
+}
+
+var telemetryEnabled bool = true // Cluster Toolkit Telemetry is enabled by default
+
+func IsTelemetryEnabled() bool {
+	return telemetryEnabled
+}
+
+func SetTelemetry(telemetry bool) {
+	telemetryEnabled = telemetry
+}
+
+var clientID string // Unique ID for each user
+
+func getClientId() string {
+	return clientID
+}
+
+func setClientId() string {
+	clientID = uuid.New().String()
+	return clientID
 }

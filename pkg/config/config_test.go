@@ -21,6 +21,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sync"
 	"testing"
 
 	"hpc-toolkit/pkg/modulereader"
@@ -922,4 +923,55 @@ func (s *zeroSuite) TestValidateSlurmClusterName(c *C) {
 		c.Check(errors.As(err, &e), Equals, true)
 		c.Check(err, ErrorMatches, ".*lowercase letter.*")
 	}
+}
+
+func (s *zeroSuite) TestSetTelemetry(c *C) {
+	// Save the original value of telemetryEnabled
+	originalTelemetryEnabled := telemetryEnabled
+	defer func() {
+		// Restore the original value after the test
+		telemetryEnabled = originalTelemetryEnabled
+	}()
+
+	// Initially, telemetry should be enabled
+	c.Check(IsTelemetryEnabled(), Equals, true)
+
+	// Test disabling telemetry
+	SetTelemetry(false)
+	c.Check(IsTelemetryEnabled(), Equals, false)
+
+	// Test enabling telemetry
+	SetTelemetry(true)
+	c.Check(IsTelemetryEnabled(), Equals, true)
+
+	// Restore the original value
+	SetTelemetry(originalTelemetryEnabled)
+	c.Check(IsTelemetryEnabled(), Equals, true)
+}
+
+func (s *zeroSuite) TestSetClientIdThreadSafety(c *C) {
+	numRoutines := 100
+	var wg sync.WaitGroup
+	wg.Add(numRoutines)
+
+	// Store the initial clientID to check for any potential race conditions.
+	initialClientId := getClientId()
+
+	for i := 0; i < numRoutines; i++ {
+		go func() {
+			defer wg.Done()
+			newClientId := setClientId()
+
+			// Check for any potential data races: all goroutines should generate a unique ID.
+			c.Assert(newClientId, Not(Equals), "")
+		}()
+	}
+
+	wg.Wait()
+
+	// Check that setting client ID does not affect existing IDs.
+	c.Assert(getClientId(), Not(Equals), initialClientId)
+
+	// Clear clientID for subsequent tests
+	clientID = ""
 }

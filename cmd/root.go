@@ -59,8 +59,11 @@ var (
 
 func init() {
 	addColorFlag(rootCmd.PersistentFlags())
+	addTelemetryFlag(rootCmd.PersistentFlags())
+
 	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
 		initColor()
+		initTelemetry()
 	}
 }
 
