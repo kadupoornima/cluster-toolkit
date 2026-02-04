@@ -23,6 +23,7 @@ import (
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/shell"
+	"hpc-toolkit/pkg/telemetry"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -64,6 +65,8 @@ func init() {
 	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
 		initColor()
 		initTelemetry()
+
+		telemetry.CollectPreMetrics()
 	}
 }
 
@@ -99,7 +102,27 @@ Commit info: {{index .Annotations "commitInfo"}}
 		rootCmd.SetVersionTemplate(tmpl)
 	}
 
-	return rootCmd.Execute()
+	// Defer Flush to ensure it runs even if the command panics or fails
+	defer telemetry.Flush()
+
+	err := rootCmd.Execute()
+
+	// Capture Error Code
+	exitCode := 0
+	if err != nil {
+		exitCode = 1 // Default generic error code
+
+		// Attempt to unwrap the specific exit code from the error
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			exitCode = exitErr.ExitCode()
+		}
+	}
+
+	telemetry.CollectPostMetrics(exitCode)
+	telemetry.ConstructPayload()
+
+	return err
 }
 
 // checkGitHashMismatch will compare the hash of the git repository vs the git
