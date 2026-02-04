@@ -17,6 +17,7 @@ package telemetry
 import (
 	"encoding/json"
 	"fmt"
+	"hpc-toolkit/pkg/logging"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -29,11 +30,15 @@ import (
 )
 
 const (
-	ClearcutURL   = "https://play.googleapis.com/log"
-	LogSourceEnum = "113"
-	ClientType    = "CLUSTER_TOOLKIT"
-	configDirName = "cluster-toolkit"
-	idFileName    = "telemetry_id"
+	ClearcutProdURL       = "https://play.googleapis.com/log"
+	ClearcutStagingURL    = "https://play.googleapis.com/staging/log"
+	ClearcutAltProdURL    = "https://play.google.com/log?format=json&hasfast=true"
+	ClearcutAltStagingURL = "https://play.google.com/staging/log?format=json&hasfast=true"
+	ClearcutLocalURL      = "http://localhost:27910/log"
+	LogSourceEnum         = 113
+	ClientType            = "CLUSTER_TOOLKIT"
+	configDirName         = "cluster-toolkit"
+	idFileName            = "telemetry_id"
 )
 
 var collector *MetricsCollector
@@ -82,19 +87,21 @@ func Flush() {
 	collector.mu.Unlock()
 
 	if err != nil {
+		logging.Error("Error generating telemetry payload: %v", err)
 		return
 	}
 
 	// Write payload to a temp file
 	f, err := os.CreateTemp("", "gcluster-telemetry-*.json")
 	if err != nil {
+		logging.Error("Error creating temp file for telemetry payload: %v", err)
 		return
 	}
 	defer f.Close()
 
 	// Prepare the full upload configuration for the background worker
 	uploadConfig := map[string]interface{}{
-		"url":     ClearcutURL,
+		"url":     ClearcutLocalURL,
 		"method":  "POST",
 		"headers": map[string]string{"User-Agent": "gcluster-telemetry/1.0"},
 		"data":    string(payload),
@@ -102,6 +109,7 @@ func Flush() {
 	}
 
 	if err := json.NewEncoder(f).Encode(uploadConfig); err != nil {
+		logging.Error("Error writing telemetry payload to temp file: %v", err)
 		return
 	}
 
@@ -201,7 +209,7 @@ func (c *MetricsCollector) generatePayload() ([]byte, error) {
 
 	logRequest := map[string]interface{}{
 		"client_info":     map[string]string{"client_type": ClientType},
-		"log_source_enum": LogSourceEnum,
+		"log_source":      LogSourceEnum,
 		"request_time_ms": time.Now().UnixMilli(),
 		"log_event":       serializedEvents,
 	}
