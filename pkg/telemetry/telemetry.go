@@ -19,6 +19,7 @@ package telemetry
 import (
 	"encoding/json"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/logging"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -48,7 +49,7 @@ type LogRequest struct {
 }
 
 var (
-	// logRequest     LogRequest
+	logRequest     LogRequest
 	logEvent       LogEvent
 	eventMetadata  []EventMetadata = make([]EventMetadata, 0)
 	eventStartTime time.Time
@@ -84,7 +85,7 @@ func CollectPostMetrics(errorCode int) {
 	// exitCode = errorCode
 }
 
-func ConstructPayload() LogRequest {
+func ConstructPayload() {
 	eventMetadata = append(eventMetadata, []EventMetadata{
 		{Key: "CLUSTER_TOOLKIT_SESSION_ID", Value: uuid.New().String()},
 		{Key: "CLUSTER_TOOLKIT_CLIENT_ID", Value: ensureClientId()},
@@ -135,7 +136,7 @@ func ConstructPayload() LogRequest {
 	})
 	if err != nil {
 		// Handle error
-		return LogRequest{}
+		return
 	}
 
 	logEvent := LogEvent{
@@ -143,7 +144,7 @@ func ConstructPayload() LogRequest {
 		SourceExtensionJson: string(sourceExtensionJSON),
 	}
 
-	return LogRequest{
+	logRequest = LogRequest{
 		RequestTimeMs: time.Now().UnixMilli(),
 		ClientInfo:    ClientInfo{client_type: "CLUSTER_TOOLKIT"},
 		LogSourceName: "CONCORD",
@@ -151,13 +152,6 @@ func ConstructPayload() LogRequest {
 	}
 
 }
-
-// return json.dumps({
-// 	"client_info": {"client_type": "CLUSTER_TOOLKIT"},
-// 	"log_source_name": "CONCORD",
-// 	"request_time_ms": int(time.time() * 1000),
-// 	"log_event": serialized_events,
-// })
 
 // "event_time_ms": int(event.time * 1000),
 //         "source_extension_json": json.dumps({
@@ -176,8 +170,16 @@ func ConstructPayload() LogRequest {
 //         }),
 
 func ensureClientId() string {
-	if config.GetClientId() != "" {
-		return config.GetClientId()
+	clientID, err := config.GetPersistentClientID()
+	if err != nil {
+		logging.Error("Failed to get client ID: %v", err)
+		// Handle error (e.g., proceed without ID or skip telemetry)
 	}
-	return config.SetClientId()
+	logging.Info("Client ID: %s", clientID)
+	return clientID
+}
+
+func PrintLogRequest() {
+
+	logging.Info("%v", logRequest)
 }

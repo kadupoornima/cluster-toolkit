@@ -14,4 +14,10 @@
 
 package telemetry
 
-func Flush() {}
+import "hpc-toolkit/pkg/config"
+
+func Flush() {
+	if config.IsTelemetryEnabled() {
+		PrintLogRequest()
+	}
+}

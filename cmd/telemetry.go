@@ -29,5 +29,5 @@ func addTelemetryFlag(flagset *pflag.FlagSet) {
 
 func initTelemetry() {
 	config.SetTelemetry(!noTelemetryFlag)
-	logging.Info("noTelemetryFlag: %v", noTelemetryFlag)
+	logging.Info("noTelemetryFlag: %v", noTelemetryFlag) // Remove later
 }
