@@ -955,12 +955,12 @@ func (s *zeroSuite) TestSetClientIdThreadSafety(c *C) {
 	wg.Add(numRoutines)
 
 	// Store the initial clientID to check for any potential race conditions.
-	initialClientId := getClientId()
+	initialClientId := GetClientId()
 
 	for i := 0; i < numRoutines; i++ {
 		go func() {
 			defer wg.Done()
-			newClientId := setClientId()
+			newClientId := SetClientId()
 
 			// Check for any potential data races: all goroutines should generate a unique ID.
 			c.Assert(newClientId, Not(Equals), "")
@@ -970,7 +970,7 @@ func (s *zeroSuite) TestSetClientIdThreadSafety(c *C) {
 	wg.Wait()
 
 	// Check that setting client ID does not affect existing IDs.
-	c.Assert(getClientId(), Not(Equals), initialClientId)
+	c.Assert(GetClientId(), Not(Equals), initialClientId)
 
 	// Clear clientID for subsequent tests
 	clientID = ""

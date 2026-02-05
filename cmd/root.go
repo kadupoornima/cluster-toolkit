@@ -67,7 +67,7 @@ func init() {
 		initColor()
 		initTelemetry()
 
-		telemetry.CollectPreMetrics()
+		telemetry.CollectPreMetrics(cmd, args)
 	}
 }
 

@@ -971,11 +971,11 @@ func SetTelemetry(telemetry bool) {
 
 var clientID string // Unique ID for each user
 
-func getClientId() string {
+func GetClientId() string {
 	return clientID
 }
 
-func setClientId() string {
+func SetClientId() string {
 	clientID = uuid.New().String()
 	return clientID
 }

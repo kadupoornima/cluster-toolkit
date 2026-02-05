@@ -14,5 +14,18 @@
 
 package telemetry
 
-func CollectPreMetrics()           {}
-func CollectPostMetrics(error int) {}
+// import (
+// "github.com/spf13/cobra"
+// )
+
+// var (
+// 	commandName EventMetadata
+// 	commandArgs EventMetadata
+// )
+
+// func CollectPreMetrics(cmd *cobra.Command, args []string) {
+// 	cmd.Name()
+// 	return
+// }
+
+// func CollectPostMetrics(error int) {}
