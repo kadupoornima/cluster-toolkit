@@ -33,74 +33,35 @@ const (
 	LogSourceEnum         = 113
 	ClientType            = "CLUSTER_TOOLKIT"
 	configDirName         = "cluster-toolkit"
+	HttpServerTimeout     = 10 * time.Second
 )
 
-var httpConfig struct {
-	URL     string            `json:"url"`
-	Method  string            `json:"method"`
-	Headers map[string]string `json:"headers"`
-	Data    string            `json:"data"`
-	Params  map[string]string `json:"params"`
-}
-
 func Flush() {
-	if !config.IsTelemetryEnabled() || logRequest.LogEvents == nil {
+	if !config.IsTelemetryEnabled() {
 		return
 	}
-	PrintLogRequest()
+	PrintLogRequest() // remove
 
 	payload := ConstructPayload()
 
-	if payload.LogEvents == nil {
-		return
-	}
-
-	// 2. Marshall the struct to JSON
 	jsonData, err := json.Marshal(payload)
+
 	if err != nil {
 		fmt.Printf("Error marshalling JSON: %v\n", err)
 		return
 	}
 
-	uploadConfig := map[string]interface{}{
-		"url":     HttpDummy,
-		"method":  "POST",
-		"headers": map[string]string{"User-Agent": "gcluster-telemetry/1.0"},
-		"data":    jsonData,
-		"params":  map[string]string{"format": "json_proto"},
-	}
-
-	if err := json.Unmarshal(jsonData, &uploadConfig); err != nil {
-		return
-	}
-
-	// 2. Prepare the Request
-	req, err := http.NewRequest(httpConfig.Method, httpConfig.URL, strings.NewReader(httpConfig.Data))
-	if err != nil {
-		return
-	}
-
-	for k, v := range httpConfig.Headers {
-		req.Header.Set(k, v)
-	}
-
-	q := req.URL.Query()
-	for k, v := range httpConfig.Params {
-		q.Add(k, v)
-	}
-	req.URL.RawQuery = q.Encode()
-
-	// 3. Create the request with a timeout (best practice)
 	client := &http.Client{
-		Timeout: time.Second * 10,
+		Timeout: HttpServerTimeout,
 	}
 
-	_, reqErr := client.Do(req)
+	resp, reqErr := client.Post(HttpDummy, "application/json", strings.NewReader(string(jsonData)))
 
 	if reqErr != nil {
 		fmt.Printf("Request failed: %v\n", reqErr)
 		return
 	}
+	resp.Body.Close()
 }
 
 func FlushOffline() {
