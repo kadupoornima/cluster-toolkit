@@ -85,7 +85,7 @@ func CollectPostMetrics(errorCode int) {
 	// exitCode = errorCode
 }
 
-func ConstructPayload() {
+func ConstructPayload() LogRequest {
 	eventMetadata = append(eventMetadata, []EventMetadata{
 		{Key: "CLUSTER_TOOLKIT_SESSION_ID", Value: uuid.New().String()},
 		{Key: "CLUSTER_TOOLKIT_CLIENT_ID", Value: ensureClientId()},
@@ -135,8 +135,8 @@ func ConstructPayload() {
 		"event_metadata": eventMetadata,
 	})
 	if err != nil {
-		// Handle error
-		return
+		logging.Error("Error collecting telemetry event metadata: %v", err)
+		return LogRequest{}
 	}
 
 	logEvent := LogEvent{
@@ -150,7 +150,7 @@ func ConstructPayload() {
 		LogSourceName: "CONCORD",
 		LogEvents:     []LogEvent{logEvent},
 	}
-
+	return logRequest
 }
 
 // "event_time_ms": int(event.time * 1000),
@@ -181,5 +181,5 @@ func ensureClientId() string {
 
 func PrintLogRequest() {
 
-	logging.Info("%v", logRequest)
+	logging.Info("logRequest: %v", logRequest)
 }

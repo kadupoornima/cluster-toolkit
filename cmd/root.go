@@ -104,7 +104,7 @@ Commit info: {{index .Annotations "commitInfo"}}
 	}
 
 	// Defer Flush to ensure it runs even if the command panics or fails
-	defer telemetry.Flush()
+	defer telemetry.Flush() // CHANGE
 
 	err := rootCmd.Execute()
 
