@@ -16,6 +16,8 @@ package telemetry
 
 import (
 	"hpc-toolkit/pkg/config"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -23,24 +25,25 @@ import (
 )
 
 var (
-	eventMetadata EventMetadata
+	metadata = make(map[string]string)
 )
 
 func CollectPreMetrics(cmd *cobra.Command, args []string) {
-	eventMetadata.CLUSTER_TOOLKIT_COMMAND_NAME = getCommandName(cmd)
-	eventMetadata.CLUSTER_TOOLKIT_COMMAND_LINE_ARGS = getCommandLineArgs(args)
-	eventMetadata.CLUSTER_TOOLKIT_SESSION_ID = getSessionId()
-	eventMetadata.CLUSTER_TOOLKIT_CLIENT_ID = getClientId()
-	eventMetadata.CLUSTER_TOOLKIT_VERSION = config.GetToolkitVersion()
-	eventMetadata.CLUSTER_TOOLKIT_BLUEPRINT = getBlueprintName()
-	eventMetadata.CLUSTER_TOOLKIT_EXECUTION_TIME = time.Now().Format(time.RFC3339)
-	eventMetadata.CLUSTER_TOOLKIT_OS_NAME = getOSName()
-	eventMetadata.CLUSTER_TOOLKIT_OS_VERSION = getOSVersion()
+	metadata["CLUSTER_TOOLKIT_COMMAND_NAME"] = getCommandName(cmd)
+	metadata["CLUSTER_TOOLKIT_COMMAND_LINE_ARGS"] = getCommandLineArgs(args)
+	metadata["CLUSTER_TOOLKIT_SESSION_ID"] = getSessionId()
+	metadata["CLUSTER_TOOLKIT_CLIENT_ID"] = getClientId()
+	metadata["CLUSTER_TOOLKIT_VERSION"] = config.GetToolkitVersion()
+	metadata["CLUSTER_TOOLKIT_BLUEPRINT"] = getBlueprintName()
+	metadata["CLUSTER_TOOLKIT_DATE_TIME"] = time.Now().Format(time.RFC3339)
+	metadata["CLUSTER_TOOLKIT_SCHEDULER"] = getSchedulers()
+	metadata["CLUSTER_TOOLKIT_OS_NAME"] = getOSName()
+	metadata["CLUSTER_TOOLKIT_OS_VERSION"] = getOSVersion()
 }
 
 func CollectPostMetrics(errorCode int) {
-	eventMetadata.CLUSTER_TOOLKIT_EXIT_CODE = errorCode
-	eventMetadata.CLUSTER_TOOLKIT_LATENCY_MS = calculateRuntime()
+	metadata["CLUSTER_TOOLKIT_RUNTIME_MS"] = strconv.FormatInt(calculateRuntime(), 10)
+	metadata["CLUSTER_TOOLKIT_EXIT_CODE"] = strconv.Itoa(errorCode)
 }
 
 func getCommandName(cmd *cobra.Command) string {
@@ -66,7 +69,7 @@ func getBlueprintName() string {
 
 func calculateRuntime() int64 {
 	eventEnd := time.Now()
-	eventStart, _ := time.Parse(time.RFC3339, eventMetadata.CLUSTER_TOOLKIT_EXECUTION_TIME)
+	eventStart, _ := time.Parse(time.RFC3339, metadata["CLUSTER_TOOLKIT_EXECUTION_TIME"])
 
 	return int64(eventEnd.Sub(eventStart).Milliseconds())
 }
@@ -79,4 +82,11 @@ func getOSName() string {
 func getOSVersion() string {
 	// return config.GetOSVersion()
 	return "testOSVersion"
+}
+
+func getSchedulers() string {
+	schedulers := make([]string, 0)
+	schedulers = append(schedulers, "testSchedulers1")
+	schedulers = append(schedulers, "testScheduler2")
+	return strings.Join(schedulers, ",")
 }

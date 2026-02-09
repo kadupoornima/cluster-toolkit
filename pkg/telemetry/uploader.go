@@ -20,20 +20,6 @@ import (
 	"hpc-toolkit/pkg/config"
 	"net/http"
 	"strings"
-	"time"
-)
-
-const (
-	ClearcutProdURL       = "https://play.googleapis.com/log"
-	ClearcutStagingURL    = "https://play.googleapis.com/staging/log"
-	ClearcutAltProdURL    = "https://play.google.com/log?format=json&hasfast=true"
-	ClearcutAltStagingURL = "https://play.google.com/staging/log?format=json&hasfast=true"
-	ClearcutLocalURL      = "http://localhost:27910/log"
-	HttpDummy             = "http://127.0.0.1:8888"
-	LogSourceEnum         = 113
-	ClientType            = "CLUSTER_TOOLKIT"
-	configDirName         = "cluster-toolkit"
-	HttpServerTimeout     = 10 * time.Second
 )
 
 func Flush() {

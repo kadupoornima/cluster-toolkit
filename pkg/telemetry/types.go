@@ -14,24 +14,20 @@
 
 package telemetry
 
-type EventMetadata struct {
-	CLUSTER_TOOLKIT_SESSION_ID        string `json:"cluster_toolkit_session_id"`
-	CLUSTER_TOOLKIT_CLIENT_ID         string `json:"cluster_toolkit_client_id"`
-	CLUSTER_TOOLKIT_VERSION           string `json:"cluster_toolkit_version"`
-	CLUSTER_TOOLKIT_COMMAND_NAME      string `json:"cluster_toolkit_command_name"`
-	CLUSTER_TOOLKIT_COMMAND_LINE_ARGS string `json:"cluster_toolkit_command_line_args"`
-	CLUSTER_TOOLKIT_BLUEPRINT         string `json:"cluster_toolkit_blueprint"`
-	CLUSTER_TOOLKIT_SCHEDULER         string `json:"cluster_toolkit_scheduler"`
-	CLUSTER_TOOLKIT_MACHINE_TYPE      string `json:"cluster_toolkit_machine_type"`
-	CLUSTER_TOOLKIT_PROVISIONING_MODE string `json:"cluster_toolkit_provisioning_mode"`
-	CLUSTER_TOOLKIT_EXIT_CODE         int    `json:"cluster_toolkit_exit_code"`
-	CLUSTER_TOOLKIT_LATENCY_MS        int64  `json:"cluster_toolkit_latency_ms"` // runtime
-	CLUSTER_TOOLKIT_EXECUTION_TIME    string `json:"cluster_toolkit_execution_time"`
-	CLUSTER_TOOLKIT_OS_NAME           string `json:"cluster_toolkit_os_name"`
-	CLUSTER_TOOLKIT_OS_VERSION        string `json:"cluster_toolkit_os_version"`
-	// add ? for datetime / time of request
-	// add note in ticket that this is taken from g3 cluster_toolkit_key.proto. Should keep in sync.
-}
+import "time"
+
+const (
+	ClearcutProdURL       = "https://play.googleapis.com/log"
+	ClearcutStagingURL    = "https://play.googleapis.com/staging/log"
+	ClearcutAltProdURL    = "https://play.google.com/log?format=json&hasfast=true"
+	ClearcutAltStagingURL = "https://play.google.com/staging/log?format=json&hasfast=true"
+	ClearcutLocalURL      = "http://localhost:27910/log"
+	HttpDummy             = "http://127.0.0.1:8888"
+	LogSourceEnum         = 113
+	ClientType            = "CLUSTER_TOOLKIT"
+	configDirName         = "cluster-toolkit"
+	HttpServerTimeout     = 10 * time.Second
+)
 
 type ClientInfo struct {
 	client_type string

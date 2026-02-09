@@ -18,19 +18,32 @@ package telemetry
 
 import (
 	"encoding/json"
+	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
 	"time"
 )
 
 var (
-	logRequest LogRequest
+	logRequest    LogRequest
+	eventMetadata []map[string]string
 )
+
+func getEventMetadataKVPairs() []map[string]string {
+	for k, v := range metadata {
+		eventMetadata = append(eventMetadata, map[string]string{
+			"key":   k,
+			"value": v,
+		})
+	}
+	return eventMetadata
+}
 
 func ConstructPayload() LogRequest {
 	sourceExtensionJSON, err := json.Marshal(map[string]interface{}{
-		"event_type":     "GCluster CLI",
-		"event_name":     "GCluster CLI command",
-		"event_metadata": eventMetadata,
+		"event_type":      "GCluster CLI",
+		"console_type":    "CLUSTER_TOOLKIT",
+		"release_version": config.GetToolkitVersion(),
+		"event_metadata":  getEventMetadataKVPairs(),
 	})
 	if err != nil {
 		logging.Error("Error collecting telemetry event metadata: %v", err)
@@ -52,6 +65,5 @@ func ConstructPayload() LogRequest {
 }
 
 func PrintLogRequest() {
-
 	logging.Info("logRequest: %v", logRequest)
 }
