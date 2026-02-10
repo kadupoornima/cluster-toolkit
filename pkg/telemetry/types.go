@@ -30,7 +30,7 @@ const (
 )
 
 type ClientInfo struct {
-	client_type string
+	ClientType string `json:"client_type"`
 }
 
 type LogEvent struct {

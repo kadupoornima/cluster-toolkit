@@ -56,7 +56,7 @@ func ConstructPayload() LogRequest {
 
 	logRequest := LogRequest{
 		RequestTimeMs: time.Now().UnixMilli(),
-		ClientInfo:    ClientInfo{client_type: "CLUSTER_TOOLKIT"},
+		ClientInfo:    ClientInfo{ClientType: "CLUSTER_TOOLKIT"},
 		LogSourceName: "CONCORD",
 		LogEvents:     []LogEvent{logEvent},
 	}
