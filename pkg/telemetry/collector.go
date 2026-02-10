@@ -42,7 +42,7 @@ func CollectPreMetrics(cmd *cobra.Command, args []string) {
 }
 
 func CollectPostMetrics(errorCode int) {
-	metadata["CLUSTER_TOOLKIT_RUNTIME_MS"] = strconv.FormatInt(calculateRuntime(), 10)
+	metadata["CLUSTER_TOOLKIT_RUNTIME_MS"] = getRuntime()
 	metadata["CLUSTER_TOOLKIT_EXIT_CODE"] = strconv.Itoa(errorCode)
 }
 
@@ -51,7 +51,7 @@ func getCommandName(cmd *cobra.Command) string {
 }
 
 func getCommandLineArgs(args []string) string {
-	return args[0]
+	return strings.Join(args, ",")
 }
 
 func getSessionId() string {
@@ -67,11 +67,11 @@ func getBlueprintName() string {
 	return "testBlueprintName"
 }
 
-func calculateRuntime() int64 {
+func getRuntime() string {
 	eventEnd := time.Now()
-	eventStart, _ := time.Parse(time.RFC3339, metadata["CLUSTER_TOOLKIT_EXECUTION_TIME"])
+	eventStart, _ := time.Parse(time.RFC3339, metadata["CLUSTER_TOOLKIT_DATE_TIME"])
 
-	return int64(eventEnd.Sub(eventStart).Milliseconds())
+	return strconv.FormatInt(eventEnd.Sub(eventStart).Milliseconds(), 10)
 }
 
 func getOSName() string {

@@ -67,7 +67,7 @@ func init() {
 		initColor()
 		initTelemetry()
 
-		telemetry.CollectPreMetrics(cmd, args)
+		telemetry.PreProcess(cmd, args)
 	}
 }
 
@@ -103,9 +103,6 @@ Commit info: {{index .Annotations "commitInfo"}}
 		rootCmd.SetVersionTemplate(tmpl)
 	}
 
-	// Defer Flush to ensure it runs even if the command panics or fails
-	defer telemetry.Flush() // CHANGE
-
 	err := rootCmd.Execute()
 
 	// Capture Error Code
@@ -119,10 +116,9 @@ Commit info: {{index .Annotations "commitInfo"}}
 			exitCode = exitErr.ExitCode()
 		}
 	}
-
-	telemetry.CollectPostMetrics(exitCode)
-	telemetry.ConstructPayload()
-
+	if config.IsTelemetryEnabled() {
+		telemetry.PostProcess(exitCode)
+	}
 	return err
 }
 

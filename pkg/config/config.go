@@ -26,7 +26,6 @@ import (
 	"strings"
 
 	"github.com/agext/levenshtein"
-	"github.com/google/uuid"
 	"github.com/hashicorp/hcl/v2"
 	"github.com/pkg/errors"
 	"github.com/zclconf/go-cty/cty"
@@ -957,25 +956,4 @@ func (bp *Blueprint) evalVars() (Dict, error) {
 		res[n] = ev
 	}
 	return NewDict(res), nil
-}
-
-var telemetryEnabled bool = true // Cluster Toolkit Telemetry is enabled by default
-
-func IsTelemetryEnabled() bool {
-	return telemetryEnabled
-}
-
-func SetTelemetry(telemetry bool) {
-	telemetryEnabled = telemetry
-}
-
-var clientID string // Unique ID for each user
-
-func GetClientId() string {
-	return clientID
-}
-
-func SetClientId() string {
-	clientID = uuid.New().String()
-	return clientID
 }

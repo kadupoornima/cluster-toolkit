@@ -30,7 +30,8 @@ const UserConfigDirName = "cluster-toolkit"
 
 // UserConfig stores persistent user settings
 type UserConfig struct {
-	ClientID string `yaml:"client_id"`
+	ClientID  string `yaml:"client_id"`
+	Telemetry bool   `yaml:"telemetry"`
 }
 
 // GetUserConfigPath returns the full path to the user configuration file
@@ -100,4 +101,17 @@ func GetPersistentClientID() (string, error) {
 	}
 
 	return cfg.ClientID, nil
+}
+
+// SetTelemetry sets the telemetry preference for the user.
+func SetTelemetry(telemetry bool) {
+	cfg, _ := LoadUserConfig()
+	cfg.Telemetry = telemetry
+	_ = SaveUserConfig(cfg)
+}
+
+// IsTelemetryEnabled returns the stored config setting for whether Telemetry data should be collected or not.
+func IsTelemetryEnabled() bool {
+	cfg, _ := LoadUserConfig()
+	return cfg.Telemetry
 }

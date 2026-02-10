@@ -21,10 +21,11 @@ import (
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
 	"time"
+
+	"github.com/spf13/cobra"
 )
 
 var (
-	logRequest    LogRequest
 	eventMetadata []map[string]string
 )
 
@@ -55,7 +56,7 @@ func ConstructPayload() LogRequest {
 		SourceExtensionJson: string(sourceExtensionJSON),
 	}
 
-	logRequest = LogRequest{
+	logRequest := LogRequest{
 		RequestTimeMs: time.Now().UnixMilli(),
 		ClientInfo:    ClientInfo{client_type: "CLUSTER_TOOLKIT"},
 		LogSourceName: "CONCORD",
@@ -64,6 +65,20 @@ func ConstructPayload() LogRequest {
 	return logRequest
 }
 
-func PrintLogRequest() {
+func PreProcess(cmd *cobra.Command, args []string) {
+	if config.IsTelemetryEnabled() {
+		CollectPreMetrics(cmd, args)
+	}
+}
+
+func PostProcess(exitCode int) {
+	if config.IsTelemetryEnabled() {
+		CollectPostMetrics(exitCode)
+		ConstructPayload()
+		Flush()
+	}
+}
+
+func PrintLogRequest(logRequest LogRequest) {
 	logging.Info("logRequest: %v", logRequest)
 }

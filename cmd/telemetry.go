@@ -24,7 +24,7 @@ import (
 var noTelemetryFlag bool = false
 
 func addTelemetryFlag(flagset *pflag.FlagSet) {
-	flagset.BoolVar(&noTelemetryFlag, "no-telemetry", false, "Disable collection of data for Telemetry.")
+	flagset.BoolVar(&noTelemetryFlag, "no-telemetry", !config.IsTelemetryEnabled(), "Disable collection of data for Telemetry.")
 }
 
 func initTelemetry() {

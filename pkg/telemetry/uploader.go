@@ -26,9 +26,10 @@ func Flush() {
 	if !config.IsTelemetryEnabled() {
 		return
 	}
-	PrintLogRequest() // remove
 
 	payload := ConstructPayload()
+
+	PrintLogRequest(payload) // remove
 
 	jsonData, err := json.Marshal(payload)
 
@@ -50,8 +51,8 @@ func Flush() {
 	resp.Body.Close()
 }
 
-func FlushOffline() {
-	if config.IsTelemetryEnabled() {
-		PrintLogRequest()
-	}
-}
+// func FlushOffline() {
+// 	if config.IsTelemetryEnabled() {
+// 		PrintLogRequest()
+// 	}
+// }
