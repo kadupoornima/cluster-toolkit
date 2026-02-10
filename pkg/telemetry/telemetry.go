@@ -21,8 +21,6 @@ import (
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
 	"time"
-
-	"github.com/spf13/cobra"
 )
 
 var (
@@ -65,18 +63,10 @@ func ConstructPayload() LogRequest {
 	return logRequest
 }
 
-func PreProcess(cmd *cobra.Command, args []string) {
-	if config.IsTelemetryEnabled() {
-		CollectPreMetrics(cmd, args)
-	}
-}
-
 func PostProcess(exitCode int) {
-	if config.IsTelemetryEnabled() {
-		CollectPostMetrics(exitCode)
-		ConstructPayload()
-		Flush()
-	}
+	CollectPostMetrics(exitCode)
+	ConstructPayload()
+	Flush()
 }
 
 func PrintLogRequest(logRequest LogRequest) {
