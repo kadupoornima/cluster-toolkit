@@ -22,12 +22,10 @@ import (
 	"strings"
 )
 
-func Flush() {
+func Flush(payload LogRequest) {
 	if !config.IsTelemetryEnabled() {
 		return
 	}
-
-	payload := ConstructPayload()
 
 	PrintLogRequest(payload) // remove
 

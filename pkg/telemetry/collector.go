@@ -35,7 +35,7 @@ func CollectPreMetrics(cmd *cobra.Command, args []string) {
 	metadata["CLUSTER_TOOLKIT_CLIENT_ID"] = getClientId()
 	metadata["CLUSTER_TOOLKIT_VERSION"] = config.GetToolkitVersion()
 	metadata["CLUSTER_TOOLKIT_BLUEPRINT"] = getBlueprintName()
-	metadata["CLUSTER_TOOLKIT_DATE_TIME"] = time.Now().Format(time.RFC3339)
+	metadata["CLUSTER_TOOLKIT_CMD_DATE_TIME"] = time.Now().Format(time.RFC3339)
 	metadata["CLUSTER_TOOLKIT_SCHEDULER"] = getSchedulers()
 	metadata["CLUSTER_TOOLKIT_OS_NAME"] = getOSName()
 	metadata["CLUSTER_TOOLKIT_OS_VERSION"] = getOSVersion()
@@ -69,7 +69,7 @@ func getBlueprintName() string {
 
 func getRuntime() string {
 	eventEnd := time.Now()
-	eventStart, _ := time.Parse(time.RFC3339, metadata["CLUSTER_TOOLKIT_DATE_TIME"])
+	eventStart, _ := time.Parse(time.RFC3339, metadata["CLUSTER_TOOLKIT_CMD_DATE_TIME"])
 
 	return strconv.FormatInt(eventEnd.Sub(eventStart).Milliseconds(), 10)
 }

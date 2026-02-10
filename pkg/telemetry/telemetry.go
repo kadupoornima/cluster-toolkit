@@ -24,7 +24,7 @@ import (
 )
 
 var (
-	eventMetadata []map[string]string
+	eventMetadata []map[string]string = make([]map[string]string, 0)
 )
 
 func getEventMetadataKVPairs() []map[string]string {
@@ -65,8 +65,8 @@ func ConstructPayload() LogRequest {
 
 func PostProcess(exitCode int) {
 	CollectPostMetrics(exitCode)
-	ConstructPayload()
-	Flush()
+	payload := ConstructPayload()
+	Flush(payload)
 }
 
 func PrintLogRequest(logRequest LogRequest) {
