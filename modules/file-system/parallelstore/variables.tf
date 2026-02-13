@@ -53,6 +53,10 @@ variable "size_gb" {
   description = "Storage size of the parallelstore instance in GB."
   type        = number
   default     = 12000
+  validation {
+    condition     = var.size_gb >= 12000
+    error_message = "The size_gb must be greater than or equal to 12000."
+  }
 }
 
 variable "labels" {

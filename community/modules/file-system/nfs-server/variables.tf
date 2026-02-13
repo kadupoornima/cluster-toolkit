@@ -57,12 +57,20 @@ variable "disk_size" {
   description = "Storage size in GB for the NFS data disk"
   type        = number
   default     = "100"
+  validation {
+    condition     = var.disk_size >= 10
+    error_message = "The disk_size must be greater than or equal to 10 GB."
+  }
 }
 
 variable "type" {
   description = "Storage type for the NFS data disk"
   type        = string
   default     = "pd-ssd"
+  validation {
+    condition     = contains(["pd-standard", "pd-balanced", "pd-ssd", "pd-extreme", "hyperdisk-balanced", "hyperdisk-extreme", "hyperdisk-throughput"], var.type)
+    error_message = "Allowed values for type are \"pd-standard\", \"pd-balanced\", \"pd-ssd\", \"pd-extreme\", \"hyperdisk-balanced\", \"hyperdisk-extreme\", \"hyperdisk-throughput\"."
+  }
 }
 
 variable "create_snapshot_before_destroy" {

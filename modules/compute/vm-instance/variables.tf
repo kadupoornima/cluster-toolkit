@@ -23,6 +23,10 @@ variable "instance_count" {
   description = "Number of instances"
   type        = number
   default     = 1
+  validation {
+    condition     = var.instance_count >= 0
+    error_message = "The instance count must be greater than or equal to 0."
+  }
 }
 
 variable "instance_image" {
@@ -54,6 +58,10 @@ variable "disk_type" {
   description = "Disk type for instances."
   type        = string
   default     = "pd-standard"
+  validation {
+    condition     = contains(["pd-standard", "pd-balanced", "pd-ssd", "pd-extreme", "hyperdisk-balanced", "hyperdisk-extreme", "hyperdisk-throughput"], var.disk_type)
+    error_message = "Allowed values for disk_type are \"pd-standard\", \"pd-balanced\", \"pd-ssd\", \"pd-extreme\", \"hyperdisk-balanced\", \"hyperdisk-extreme\", \"hyperdisk-throughput\"."
+  }
 }
 
 variable "auto_delete_boot_disk" {
