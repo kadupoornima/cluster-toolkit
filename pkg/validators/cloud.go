@@ -39,7 +39,10 @@ func getErrorReason(err googleapi.Error) (string, map[string]interface{}) {
 			continue
 		}
 		if reason, ok := m["reason"].(string); ok {
-			return reason, m["metadata"].(map[string]interface{})
+			if metadata, ok := m["metadata"].(map[string]interface{}); ok {
+				return reason, metadata
+			}
+			return reason, nil
 		}
 	}
 	return "", nil
