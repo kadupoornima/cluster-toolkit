@@ -203,7 +203,7 @@ main() {
 
 	# configure ansible to always use correct Python binary
 	if [ ! -f /etc/ansible/ansible.cfg ]; then
-		mkdir /etc/ansible
+		mkdir -p /etc/ansible
 		cat <<-EOF >/etc/ansible/ansible.cfg
 			[defaults]
 			interpreter_python=${venv_python_path}
@@ -226,9 +226,7 @@ main() {
 		${venv_python_path} -m pip install ansible=="${REQ_ANSIBLE_PIP_VERSION}"
 	fi
 	while read -r cmd; do
-		if ! [ -L "/usr/bin/${cmd}" ]; then
-			ln -s "${venv_path}/bin/${cmd}" "/usr/bin/${cmd}"
-		fi
+		ln -sf "${venv_path}/bin/${cmd}" "/usr/bin/${cmd}"
 	done <<-EOF
 		ansible
 		ansible-config
