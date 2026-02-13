@@ -80,6 +80,11 @@ variable "mtu" {
   type        = number
   description = "The network MTU (default: 8896). Recommended values: 0 (use Compute Engine default), 1460 (default outside HPC environments), 1500 (Internet default), or 8896 (for Jumbo packets). Allowed are all values in the range 1300 to 8896, inclusively."
   default     = 8896
+
+  validation {
+    condition     = var.mtu == 0 || (var.mtu >= 1300 && var.mtu <= 8896)
+    error_message = "MTU must be 0 (default) or between 1300 and 8896 (valid range for Google Cloud VPC)."
+  }
 }
 
 variable "enable_ipv6_ula" {

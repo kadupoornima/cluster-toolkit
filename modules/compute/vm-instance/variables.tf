@@ -51,9 +51,17 @@ variable "disk_size_gb" {
 }
 
 variable "disk_type" {
-  description = "Disk type for instances."
+  description = "Disk type for instances. Allowed values are 'pd-standard', 'pd-balanced', 'pd-ssd', 'pd-extreme', 'hyperdisk-balanced', 'hyperdisk-throughput', 'hyperdisk-extreme', 'hyperdisk-ml'."
   type        = string
   default     = "pd-standard"
+
+  validation {
+    condition = contains([
+      "pd-standard", "pd-balanced", "pd-ssd", "pd-extreme",
+      "hyperdisk-balanced", "hyperdisk-throughput", "hyperdisk-extreme", "hyperdisk-ml"
+    ], var.disk_type)
+    error_message = "Disk type must be one of the supported Google Cloud persistent disk or hyperdisk types: 'pd-standard', 'pd-balanced', 'pd-ssd', 'pd-extreme', 'hyperdisk-balanced', 'hyperdisk-throughput', 'hyperdisk-extreme', 'hyperdisk-ml'."
+  }
 }
 
 variable "auto_delete_boot_disk" {
@@ -72,6 +80,11 @@ variable "local_ssd_interface" {
   description = "Interface to be used with local SSDs. Can be either 'NVME' or 'SCSI'. No effect unless `local_ssd_count` is also set."
   type        = string
   default     = "NVME"
+
+  validation {
+    condition     = contains(["NVME", "SCSI"], var.local_ssd_interface)
+    error_message = "Local SSD interface must be 'NVME' or 'SCSI' as supported by GCE."
+  }
 }
 
 variable "additional_persistent_disks" {
@@ -337,9 +350,14 @@ variable "spot" {
 }
 
 variable "provisioning_model" {
-  description = "Provisioning model for cloud instance."
+  description = "Provisioning model for cloud instance. Allowed values are 'STANDARD', 'SPOT'."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.provisioning_model == null || contains(["STANDARD", "SPOT"], coalesce(var.provisioning_model, "STANDARD"))
+    error_message = "Provisioning model must be 'STANDARD' or 'SPOT'. SPOT replaces the deprecated 'spot' boolean."
+  }
 }
 
 variable "min_cpu_platform" {
