@@ -43,7 +43,7 @@ func (s *MySuite) TestSetCLIVariables(c *C) {
 		"keyArrayOfMaps=[foo, {bar: baz, qux: 1}]",
 		"keyMapOfArrays={foo: [1, 2, 3], bar: [a, b, c]}",
 	}
-	c.Assert(setCLIVariables(&ds, vars), IsNil)
+	c.Assert(config.SetCLIVariables(&ds, vars), IsNil)
 	c.Check(
 		ds.Vars.Items(), DeepEquals, map[string]cty.Value{
 			"project_id":      cty.StringVal("cli_test_project_id"),
@@ -75,12 +75,12 @@ func (s *MySuite) TestSetCLIVariables(c *C) {
 	// Failure: Variable without '='
 	ds = config.DeploymentSettings{}
 	inv := []string{"project_idcli_test_project_id"}
-	c.Check(setCLIVariables(&ds, inv), ErrorMatches, "invalid format: .*")
+	c.Check(config.SetCLIVariables(&ds, inv), ErrorMatches, "invalid format: .*")
 
 	// Failure: Unmarshalable value
 	ds = config.DeploymentSettings{}
 	inv = []string{"pyrite={gold"}
-	c.Check(setCLIVariables(&ds, inv), ErrorMatches, ".*unable to convert.*pyrite.*gold.*")
+	c.Check(config.SetCLIVariables(&ds, inv), ErrorMatches, ".*unable to convert.*pyrite.*gold.*")
 }
 
 func (s *MySuite) TestSetBackendConfig(c *C) {
@@ -92,7 +92,7 @@ func (s *MySuite) TestSetBackendConfig(c *C) {
 	}
 
 	ds := config.DeploymentSettings{}
-	c.Assert(setBackendConfig(&ds, vars), IsNil)
+	c.Assert(config.SetBackendConfig(&ds, vars), IsNil)
 
 	be := ds.TerraformBackendDefaults
 	c.Check(be.Type, Equals, "green")
@@ -172,7 +172,7 @@ func (s *MySuite) TestSetBackendConfig_Invalid(c *C) {
 		"typegreen",
 	}
 	ds := config.DeploymentSettings{}
-	c.Assert(setBackendConfig(&ds, vars), ErrorMatches, "invalid format: .*")
+	c.Assert(config.SetBackendConfig(&ds, vars), ErrorMatches, "invalid format: .*")
 }
 
 func (s *MySuite) TestSetBackendConfig_NoOp(c *C) {
@@ -180,7 +180,7 @@ func (s *MySuite) TestSetBackendConfig_NoOp(c *C) {
 		TerraformBackendDefaults: config.TerraformBackend{
 			Type: "green"}}
 
-	c.Assert(setBackendConfig(&ds, []string{}), IsNil)
+	c.Assert(config.SetBackendConfig(&ds, []string{}), IsNil)
 	c.Check(ds.TerraformBackendDefaults, DeepEquals, config.TerraformBackend{
 		Type: "green"})
 }
@@ -188,16 +188,16 @@ func (s *MySuite) TestSetBackendConfig_NoOp(c *C) {
 func (s *MySuite) TestValidationLevels(c *C) {
 	bp := config.Blueprint{}
 
-	c.Check(setValidationLevel(&bp, "ERROR"), IsNil)
+	c.Check(config.SetValidationLevel(&bp, "ERROR"), IsNil)
 	c.Check(bp.ValidationLevel, Equals, config.ValidationError)
 
-	c.Check(setValidationLevel(&bp, "WARNING"), IsNil)
+	c.Check(config.SetValidationLevel(&bp, "WARNING"), IsNil)
 	c.Check(bp.ValidationLevel, Equals, config.ValidationWarning)
 
-	c.Check(setValidationLevel(&bp, "IGNORE"), IsNil)
+	c.Check(config.SetValidationLevel(&bp, "IGNORE"), IsNil)
 	c.Check(bp.ValidationLevel, Equals, config.ValidationIgnore)
 
-	c.Check(setValidationLevel(&bp, "INVALID"), NotNil)
+	c.Check(config.SetValidationLevel(&bp, "INVALID"), NotNil)
 }
 
 func (s *MySuite) TestValidateMaybeDie(c *C) {
