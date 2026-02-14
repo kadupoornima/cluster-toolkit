@@ -298,7 +298,7 @@ func (s *zeroSuite) TestWriteOutputs(c *C) {
 	c.Assert(err, IsNil)
 
 	// Success: Outputs added
-	outputList := []modulereader.OutputInfo{
+	outputList := []config.OutputInfo{
 		{Name: "output1"},
 		{
 			Name:      "output2",
