@@ -420,7 +420,7 @@ func (s *zeroSuite) TestOutputNamesByGroup(c *C) {
 		Modules: []Module{
 			{
 				ID: "stripes",
-				Outputs: []modulereader.OutputInfo{
+				Outputs: []ModuleOutput{
 					{Name: "length"}}}}}
 	pony := Group{
 		Name: "pony",
