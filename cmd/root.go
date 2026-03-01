@@ -68,10 +68,7 @@ func init() {
 			logging.Error("Failure in initializing user config: %v", err)
 		}
 		initColor()
-
-		if config.IsTelemetryEnabled() {
-			telemetry.Initialize(cmd, args)
-		}
+		telemetry.Initialize(cmd, args)
 	}
 }
 

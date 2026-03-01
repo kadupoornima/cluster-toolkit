@@ -66,38 +66,27 @@ func InitUserConfig() error {
 	return nil
 }
 
-func readConfig() {
-	err := viper.ReadRemoteConfig()
-	if err != nil {
-		logging.Error("failed to read remote viper config: %v", err)
-	}
-}
-
 // GetPersistentUserId returns the stored User ID from Viper config.
 func GetPersistentUserId() string {
-	readConfig()
+	_ = viper.ReadRemoteConfig()
 	return viper.GetString(USER_ID_KEY)
 
 }
 
 // IsTelemetryEnabled returns the stored config setting for whether Telemetry data should be collected or not.
 func IsTelemetryEnabled() bool {
-	readConfig()
-	logging.Info("TELEMETRY_KEY: %v", viper.GetBool(TELEMETRY_KEY))
+	_ = viper.ReadRemoteConfig()
 	return viper.GetBool(TELEMETRY_KEY)
 }
 
 // SetTelemetry sets the telemetry preference for the user.
 func SetTelemetry(telemetry bool) {
-	readConfig()
-	logging.Info("before TELEMETRY_KEY: %v", viper.GetBool(TELEMETRY_KEY))
-	logging.Info("telemetry = %v", telemetry)
+	_ = viper.ReadRemoteConfig()
 	viper.Set(TELEMETRY_KEY, telemetry)
 	err := SaveToFirestore()
 	if err != nil {
 		logging.Error("Failed to save state to Firestore: %v", err)
 	}
-	logging.Info("after TELEMETRY_KEY: %v", viper.GetBool(TELEMETRY_KEY))
 }
 
 // generateUniqueID creates a stable hash based on the machine and user
@@ -107,8 +96,6 @@ func generateUniqueID() string {
 
 	// Create a stable string: "hostname-username"
 	rawID := fmt.Sprintf("%s-%s", host, u.Username)
-
-	logging.Info("rawId: %v", rawID)
 
 	// Hash it to create a clean, fixed-length unique ID
 	hash := sha256.Sum256([]byte(rawID))
@@ -127,7 +114,6 @@ func SaveToFirestore() error {
 	defer client.Close()
 
 	settings := viper.AllSettings()
-	logging.Info("\nsettings:\n %v\n\n", settings)
 
 	_, err = client.Collection(collectionName).Doc(userID).Set(ctx, settings)
 	if err != nil {

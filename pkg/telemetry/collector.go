@@ -16,7 +16,6 @@ package telemetry
 
 import (
 	"bufio"
-	"fmt"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
 	"os"
@@ -29,7 +28,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	"github.com/spf13/viper"
 )
 
 var (
@@ -39,17 +37,30 @@ var (
 
 func CollectPreMetrics(cmd *cobra.Command, args []string) {
 	bp = getBlueprint(args)
+
 	metadata["CLUSTER_TOOLKIT_EVENT_ID"] = getEventId()
 	metadata["CLUSTER_TOOLKIT_USER_ID"] = getUserId()
-	metadata["CLUSTER_TOOLKIT_COMMAND_NAME"] = getCommandName(cmd)
-	metadata["CLUSTER_TOOLKIT_CMD_FLAGS"] = getCmdFlags(cmd)
 	metadata["CLUSTER_TOOLKIT_VERSION"] = getToolkitVersion()
+	metadata["CLUSTER_TOOLKIT_COMMAND_NAME"] = getCommandName(cmd)
+	metadata["CLUSTER_TOOLKIT_COMMAND_FLAGS"] = getCmdFlags(cmd)
 	metadata["CLUSTER_TOOLKIT_BLUEPRINT"] = getBlueprintName(bp)
-	metadata["CLUSTER_TOOLKIT_SCHEDULER"] = getSchedulers()
+	metadata["CLUSTER_TOOLKIT_DEPLOYMENT_FILE"] = getDeploymentFile(args)
+	metadata["CLUSTER_TOOLKIT_IS_GKE"] = getIsGke(args)
+	metadata["CLUSTER_TOOLKIT_IS_SLURM"] = getIsSlurm(args)
+	metadata["CLUSTER_TOOLKIT_IS_VM_INSTANCE"] = getIsVmInstance(args)
+	metadata["CLUSTER_TOOLKIT_MACHINE_TYPE"] = getMachineType(args)
+	metadata["CLUSTER_TOOLKIT_REGION"] = getRegion(args)
+	metadata["CLUSTER_TOOLKIT_ZONE"] = getZone(args)
+	metadata["CLUSTER_TOOLKIT_PROVISIONING_MODE"] = getProvisioningMode(args)
 	metadata["CLUSTER_TOOLKIT_MODULES"] = getModules(bp)
 	metadata["CLUSTER_TOOLKIT_OS_NAME"] = getOSName()
 	metadata["CLUSTER_TOOLKIT_OS_VERSION"] = getOSVersion()
-	metadata["CLUSTER_TOOLKIT_SETTINGS"] = getAllSettings()
+	metadata["CLUSTER_TOOLKIT_TERRAFORM_VERSION"] = getTerraformVersion(args)
+	metadata["CLUSTER_TOOLKIT_IS_INTERNAL_USER"] = getIsInternalUser(args)
+	metadata["CLUSTER_TOOLKIT_DEPLOYED_FROM_SOURCE"] = getDeployedFromSource(args)
+	metadata["CLUSTER_TOOLKIT_DEPLOYED_FROM_BINARY"] = getDeployedFromBinary(args)
+	metadata["CLUSTER_TOOLKIT_IS_TEST_DATA"] = getIsTestData()
+
 }
 
 func CollectPostMetrics(errorCode int) {
@@ -65,13 +76,57 @@ func getCommandName(cmd *cobra.Command) string {
 	return cmd.Name()
 }
 
-func getAllSettings() string {
-	return fmt.Sprintf("%v", viper.AllSettings())
-}
-
 func getBlueprint(args []string) config.Blueprint {
 	bp, _, _ := config.NewBlueprint(args[0])
 	return bp
+}
+func getDeploymentFile(args []string) string {
+
+	return args[0]
+}
+func getIsGke(args []string) string {
+	return args[0]
+}
+func getIsSlurm(args []string) string {
+
+	return args[0]
+}
+func getIsVmInstance(args []string) string {
+
+	return args[0]
+}
+func getMachineType(args []string) string {
+
+	return args[0]
+}
+func getRegion(args []string) string {
+
+	return args[0]
+}
+func getZone(args []string) string {
+
+	return args[0]
+}
+func getProvisioningMode(args []string) string {
+
+	return args[0]
+}
+func getIsInternalUser(args []string) string {
+
+	return args[0]
+}
+func getTerraformVersion(args []string) string {
+	return args[0]
+}
+
+func getDeployedFromSource(args []string) string {
+	return args[0]
+}
+func getDeployedFromBinary(args []string) string {
+	return args[0]
+}
+func getIsTestData() string {
+	return "true"
 }
 
 func getModules(bp config.Blueprint) string {
