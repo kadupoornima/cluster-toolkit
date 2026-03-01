@@ -15,19 +15,45 @@
 package cmd
 
 import (
+	"fmt"
 	"hpc-toolkit/pkg/config"
-	"hpc-toolkit/pkg/logging"
 
-	"github.com/spf13/pflag"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 )
 
-var noTelemetryFlag bool = false
-
-func addTelemetryFlag(flagset *pflag.FlagSet) {
-	flagset.BoolVar(&noTelemetryFlag, "no-telemetry", !config.IsTelemetryEnabled(), "Disable collection of data for Telemetry.")
+func init() {
+	rootCmd.AddCommand(telemetryCmd)
 }
 
-func initTelemetry() {
-	config.SetTelemetry(!noTelemetryFlag)
-	logging.Info("noTelemetryFlag: %v", noTelemetryFlag) // Remove later
+var telemetryCmd = &cobra.Command{
+	Use:   "telemetry [on|off]",
+	Short: "Enable or disable telemetry",
+	Args:  cobra.ExactArgs(1), // Ensure exactly one argument is provided
+	RunE: func(cmd *cobra.Command, args []string) error {
+		val := args[0]
+		var enabled bool
+
+		// 1. Logic to parse "on/off" or "true/false"
+		switch val {
+		case "on", "true", "yes":
+			enabled = true
+		case "off", "false", "no":
+			enabled = false
+		default:
+			return fmt.Errorf("invalid argument %q: use 'on' or 'off'", val)
+		}
+
+		// 2. Update Viper (Memory)
+		viper.Set(config.TELEMETRY_KEY, enabled)
+
+		// 3. Persist to Firestore (Remote)
+		err := config.SaveToFirestore()
+		if err != nil {
+			return fmt.Errorf("could not save setting to cloud: %w", err)
+		}
+
+		fmt.Printf("Telemetry has been turned %s.\n", val)
+		return nil
+	},
 }

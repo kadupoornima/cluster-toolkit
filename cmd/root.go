@@ -61,14 +61,16 @@ var (
 
 func init() {
 	addColorFlag(rootCmd.PersistentFlags())
-	addTelemetryFlag(rootCmd.PersistentFlags())
 
 	rootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
+		err := config.InitUserConfig()
+		if err != nil {
+			logging.Error("Failure in initializing user config: %v", err)
+		}
 		initColor()
-		initTelemetry()
 
 		if config.IsTelemetryEnabled() {
-			telemetry.CollectPreMetrics(cmd, args)
+			telemetry.Initialize(cmd, args)
 		}
 	}
 }
@@ -119,7 +121,7 @@ Commit info: {{index .Annotations "commitInfo"}}
 		}
 	}
 	if config.IsTelemetryEnabled() {
-		telemetry.PostProcess(exitCode)
+		telemetry.Finalize(exitCode)
 	}
 	return err
 }

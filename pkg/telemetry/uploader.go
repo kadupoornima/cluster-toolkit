@@ -48,9 +48,3 @@ func Flush(payload LogRequest) {
 	}
 	resp.Body.Close()
 }
-
-// func FlushOffline() {
-// 	if config.IsTelemetryEnabled() {
-// 		PrintLogRequest()
-// 	}
-// }

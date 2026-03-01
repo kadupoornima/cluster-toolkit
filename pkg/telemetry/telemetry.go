@@ -21,6 +21,8 @@ import (
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
 	"time"
+
+	"github.com/spf13/cobra"
 )
 
 var (
@@ -38,7 +40,7 @@ func getEventMetadataKVPairs() []map[string]string {
 }
 
 func ConstructPayload() LogRequest {
-	sourceExtensionJSON, err := json.Marshal(map[string]interface{}{
+	sourceExtensionJSON, err := json.Marshal(map[string]any{
 		"event_type":      "GCluster CLI",
 		"console_type":    "CLUSTER_TOOLKIT",
 		"release_version": config.GetToolkitVersion(),
@@ -63,7 +65,11 @@ func ConstructPayload() LogRequest {
 	return logRequest
 }
 
-func PostProcess(exitCode int) {
+func Initialize(cmd *cobra.Command, args []string) {
+	CollectPreMetrics(cmd, args)
+}
+
+func Finalize(exitCode int) {
 	CollectPostMetrics(exitCode)
 	payload := ConstructPayload()
 	Flush(payload)
@@ -71,4 +77,5 @@ func PostProcess(exitCode int) {
 
 func PrintLogRequest(logRequest LogRequest) {
 	logging.Info("logRequest: %v", logRequest)
+	// logging.Info("\n\nmetrics: %v", strings.ReplaceAll(logRequest.LogEvents[0].SourceExtensionJson, ",", "\n"))
 }
