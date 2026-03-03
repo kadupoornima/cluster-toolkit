@@ -15,10 +15,14 @@
 package telemetry
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/logging"
+	"io"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -47,4 +51,35 @@ func Flush(payload LogRequest) {
 		return
 	}
 	resp.Body.Close()
+
+	u, _ := url.Parse(ClearcutProdURL)
+	params := url.Values{}
+	params.Add("format", "json_proto")
+	u.RawQuery = params.Encode()
+
+	req, err := http.NewRequest("POST", u.String(), bytes.NewBuffer(jsonData))
+	if err != nil {
+		fmt.Printf("Error creating request: %v\n", err)
+		return
+	}
+
+	// Replace "MyUserAgent/1.0" with your actual get_user_agent() logic
+	req.Header.Set("User-Agent", "MyUserAgent/1.0")
+	req.Header.Set("Content-Type", "application/json")
+
+	logging.Info("\n\n\nRequest: %v\n", req)
+	resp2, err2 := client.Do(req)
+	// resp2, reqErr2 := client.Post(ClearcutProdURL, "application/json", strings.NewReader(string(jsonData)))
+
+	if err2 != nil {
+		logging.Error("Error sending request: %v\n", err)
+		return
+	}
+	defer resp2.Body.Close()
+
+	// Handle Response
+	body, _ := io.ReadAll(resp2.Body)
+	logging.Info("Status: %v\n", resp2.Status)
+	logging.Info("Response: %v\n", string(body))
+
 }

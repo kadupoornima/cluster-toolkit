@@ -25,24 +25,29 @@ import (
 	"github.com/spf13/cobra"
 )
 
+const (
+	CLUSTER_TOOLKIT string = "CLUSTER_TOOLKIT"
+	CONCORD         string = "CONCORD"
+)
+
 var (
 	eventMetadata []map[string]string = make([]map[string]string, 0)
 )
 
-func getEventMetadataKVPairs() []map[string]string {
-	for k, v := range metadata {
-		eventMetadata = append(eventMetadata, map[string]string{
-			"key":   k,
-			"value": v,
-		})
-	}
-	return eventMetadata
+func Initialize(cmd *cobra.Command, args []string) {
+	CollectPreMetrics(cmd, args)
+}
+
+func Finalize(exitCode int) {
+	CollectPostMetrics(exitCode)
+	payload := ConstructPayload()
+	Flush(payload)
 }
 
 func ConstructPayload() LogRequest {
 	sourceExtensionJSON, err := json.Marshal(map[string]any{
 		"event_type":      "GCluster CLI",
-		"console_type":    "CLUSTER_TOOLKIT",
+		"console_type":    CLUSTER_TOOLKIT,
 		"release_version": config.GetToolkitVersion(),
 		"event_metadata":  getEventMetadataKVPairs(),
 	})
@@ -58,24 +63,23 @@ func ConstructPayload() LogRequest {
 
 	logRequest := LogRequest{
 		RequestTimeMs: time.Now().UnixMilli(),
-		ClientInfo:    ClientInfo{ClientType: "CLUSTER_TOOLKIT"},
-		LogSourceName: "CONCORD",
-		LogEvents:     []LogEvent{logEvent},
+		ClientInfo:    ClientInfo{ClientType: CLUSTER_TOOLKIT},
+		LogSourceName: CONCORD,
+		LogEvent:      []LogEvent{logEvent},
 	}
 	return logRequest
 }
 
-func Initialize(cmd *cobra.Command, args []string) {
-	CollectPreMetrics(cmd, args)
-}
-
-func Finalize(exitCode int) {
-	CollectPostMetrics(exitCode)
-	payload := ConstructPayload()
-	Flush(payload)
+func getEventMetadataKVPairs() []map[string]string {
+	for k, v := range metadata {
+		eventMetadata = append(eventMetadata, map[string]string{
+			"key":   k,
+			"value": v,
+		})
+	}
+	return eventMetadata
 }
 
 func PrintLogRequest(logRequest LogRequest) {
 	logging.Info("logRequest: %v", logRequest)
-	// logging.Info("\n\nmetrics: %v", strings.ReplaceAll(logRequest.LogEvents[0].SourceExtensionJson, ",", "\n"))
 }

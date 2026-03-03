@@ -42,5 +42,5 @@ type LogRequest struct {
 	RequestTimeMs int64      `json:"request_time_ms"`
 	ClientInfo    ClientInfo `json:"client_info"`
 	LogSourceName string     `json:"log_source_name"`
-	LogEvents     []LogEvent `json:"log_events"`
+	LogEvent      []LogEvent `json:"log_event"`
 }

@@ -17,7 +17,7 @@
 blueprint_name: hpc-slurm
 
 vars:
-  project_id:  ## Set GCP Project ID Here ##
+  project_id: hpc-toolkit-gsc
   deployment_name: hpc-slurm
   region: us-central1
   zone: us-central1-a

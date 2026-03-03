@@ -20,45 +20,60 @@ import (
 	"hpc-toolkit/pkg/logging"
 	"os"
 	"os/exec"
+	"regexp"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
 
 var (
-	metadata = make(map[string]string)
-	bp       config.Blueprint
+	metadata       = make(map[string]string)
+	bp             config.Blueprint
+	eventStartTime time.Time
 )
 
+func logBlueprint(bp config.Blueprint) {
+	logging.Info("BlueprintName: %v\n", bp.BlueprintName)
+	logging.Info("GhpcVersion: %v\n", bp.GhpcVersion)
+	logging.Info("Validators: %v\n", bp.Validators)
+	logging.Info("ValidationLevel: %v\n", bp.ValidationLevel)
+	logging.Info("Vars: %v\n", bp.Vars)
+	logging.Info("Groups: %v\n", bp.Groups)
+	logging.Info("TerraformBackendDefaults: %v\n", bp.TerraformBackendDefaults)
+	logging.Info("TerraformProviders: %v\n", bp.TerraformProviders)
+	logging.Info("ToolkitModulesURL: %v\n", bp.ToolkitModulesURL)
+	logging.Info("ToolkitModulesVersion: %v\n", bp.ToolkitModulesVersion)
+	logging.Info("YamlCtx: %v\n", bp.YamlCtx)
+}
 func CollectPreMetrics(cmd *cobra.Command, args []string) {
+	eventStartTime = time.Now()
 	bp = getBlueprint(args)
+	logBlueprint(bp)
 
-	metadata["CLUSTER_TOOLKIT_EVENT_ID"] = getEventId()
 	metadata["CLUSTER_TOOLKIT_USER_ID"] = getUserId()
-	metadata["CLUSTER_TOOLKIT_VERSION"] = getToolkitVersion()
 	metadata["CLUSTER_TOOLKIT_COMMAND_NAME"] = getCommandName(cmd)
 	metadata["CLUSTER_TOOLKIT_COMMAND_FLAGS"] = getCmdFlags(cmd)
 	metadata["CLUSTER_TOOLKIT_BLUEPRINT"] = getBlueprintName(bp)
-	metadata["CLUSTER_TOOLKIT_DEPLOYMENT_FILE"] = getDeploymentFile(args)
-	metadata["CLUSTER_TOOLKIT_IS_GKE"] = getIsGke(args)
-	metadata["CLUSTER_TOOLKIT_IS_SLURM"] = getIsSlurm(args)
-	metadata["CLUSTER_TOOLKIT_IS_VM_INSTANCE"] = getIsVmInstance(args)
-	metadata["CLUSTER_TOOLKIT_MACHINE_TYPE"] = getMachineType(args)
-	metadata["CLUSTER_TOOLKIT_REGION"] = getRegion(args)
-	metadata["CLUSTER_TOOLKIT_ZONE"] = getZone(args)
-	metadata["CLUSTER_TOOLKIT_PROVISIONING_MODE"] = getProvisioningMode(args)
+	metadata["CLUSTER_TOOLKIT_DEPLOYMENT_FILE"] = getDeploymentFile()
+	metadata["CLUSTER_TOOLKIT_IS_GKE"] = getIsGke(bp)
+	metadata["CLUSTER_TOOLKIT_IS_SLURM"] = getIsSlurm()
+	metadata["CLUSTER_TOOLKIT_IS_VM_INSTANCE"] = getIsVmInstance()
+	metadata["CLUSTER_TOOLKIT_MACHINE_TYPE"] = getMachineType()
+	metadata["CLUSTER_TOOLKIT_REGION"] = getRegion(bp)
+	metadata["CLUSTER_TOOLKIT_ZONE"] = getZone(bp)
+	metadata["CLUSTER_TOOLKIT_PROVISIONING_MODE"] = getProvisioningMode()
 	metadata["CLUSTER_TOOLKIT_MODULES"] = getModules(bp)
 	metadata["CLUSTER_TOOLKIT_OS_NAME"] = getOSName()
 	metadata["CLUSTER_TOOLKIT_OS_VERSION"] = getOSVersion()
-	metadata["CLUSTER_TOOLKIT_TERRAFORM_VERSION"] = getTerraformVersion(args)
-	metadata["CLUSTER_TOOLKIT_IS_INTERNAL_USER"] = getIsInternalUser(args)
-	metadata["CLUSTER_TOOLKIT_DEPLOYED_FROM_SOURCE"] = getDeployedFromSource(args)
-	metadata["CLUSTER_TOOLKIT_DEPLOYED_FROM_BINARY"] = getDeployedFromBinary(args)
+	metadata["CLUSTER_TOOLKIT_TERRAFORM_VERSION"] = getTerraformVersion(bp)
+	metadata["CLUSTER_TOOLKIT_IS_INTERNAL_USER"] = getIsInternalUser()
+	metadata["CLUSTER_TOOLKIT_DEPLOYED_FROM_SOURCE"] = getDeployedFromSource()
+	metadata["CLUSTER_TOOLKIT_DEPLOYED_FROM_BINARY"] = getDeployedFromBinary()
 	metadata["CLUSTER_TOOLKIT_IS_TEST_DATA"] = getIsTestData()
 
 }
@@ -68,91 +83,120 @@ func CollectPostMetrics(errorCode int) {
 	metadata["CLUSTER_TOOLKIT_EXIT_CODE"] = strconv.Itoa(errorCode)
 }
 
-func getEventId() string {
-	return uuid.New().String()
+func getUserId() string {
+	return config.GetPersistentUserId()
 }
 
 func getCommandName(cmd *cobra.Command) string {
 	return cmd.Name()
 }
 
+func getCmdFlags(cmd *cobra.Command) string {
+	flags := make([]string, 0)
+	cmd.Flags().Visit(func(f *pflag.Flag) {
+		flags = append(flags, f.Name)
+	})
+	return strings.Join(flags, ",")
+}
+
 func getBlueprint(args []string) config.Blueprint {
 	bp, _, _ := config.NewBlueprint(args[0])
 	return bp
 }
-func getDeploymentFile(args []string) string {
+func getDeploymentFile() string {
 
-	return args[0]
-}
-func getIsGke(args []string) string {
-	return args[0]
-}
-func getIsSlurm(args []string) string {
-
-	return args[0]
-}
-func getIsVmInstance(args []string) string {
-
-	return args[0]
-}
-func getMachineType(args []string) string {
-
-	return args[0]
-}
-func getRegion(args []string) string {
-
-	return args[0]
-}
-func getZone(args []string) string {
-
-	return args[0]
-}
-func getProvisioningMode(args []string) string {
-
-	return args[0]
-}
-func getIsInternalUser(args []string) string {
-
-	return args[0]
-}
-func getTerraformVersion(args []string) string {
-	return args[0]
+	return "test"
 }
 
-func getDeployedFromSource(args []string) string {
-	return args[0]
-}
-func getDeployedFromBinary(args []string) string {
-	return args[0]
-}
-func getIsTestData() string {
-	return "true"
-}
-
-func getModules(bp config.Blueprint) string {
+func getModulesList(bp config.Blueprint) []string {
 	moduleInfos := make([]config.Module, 0)
 	modules := make([]string, 0)
 	moduleInfos = append(moduleInfos, config.GetAllModules(&bp)...)
 	for _, module := range moduleInfos {
 		modules = append(modules, string(module.Source))
 	}
-	return strings.Join(modules, ",")
+	return modules
 }
 
-func getToolkitVersion() string {
-	return config.GetToolkitVersion()
-}
+var (
+	GkeModulePatterns   = []string{".*gke-node-pool.*", ".*gke-cluster.*"}
+	SlurmModulePatterns = []string{".*schedmd-slurm-gcp-.*"}
+)
 
-func getCmdFlags(cmd *cobra.Command) string {
-	flags := make([]string, 0)
-	cmd.LocalFlags().Visit(func(f *pflag.Flag) {
-		flags = append(flags, f.Name)
+func getIsGke(bp config.Blueprint) string {
+	modules := getModulesList(bp)
+	isGke := false
+	isGke = slices.ContainsFunc(modules, func(s string) bool {
+		for _, pattern := range GkeModulePatterns {
+			match, _ := regexp.MatchString(pattern, s)
+			isGke = isGke || match
+		}
+		return isGke
 	})
-	return strings.Join(flags, ",")
+	return strconv.FormatBool(isGke)
 }
 
-func getUserId() string {
-	return config.GetPersistentUserId()
+func getIsSlurm() string {
+	modules := getModulesList(bp)
+	isSlurm := false
+	isSlurm = slices.ContainsFunc(modules, func(s string) bool {
+		for _, pattern := range SlurmModulePatterns {
+			match, _ := regexp.MatchString(pattern, s)
+			isSlurm = isSlurm || match
+		}
+		return isSlurm
+	})
+	return strconv.FormatBool(isSlurm)
+}
+
+func getIsVmInstance() string {
+
+	return "test"
+}
+func getMachineType() string {
+
+	return "test"
+}
+
+func getRegion(bp config.Blueprint) string {
+	if bp.Vars.Has("region") {
+		return bp.Vars.Get("region").AsString()
+	}
+	return ""
+}
+
+func getZone(bp config.Blueprint) string {
+	if bp.Vars.Has("zone") {
+		return bp.Vars.Get("zone").AsString()
+	}
+	return ""
+}
+func getProvisioningMode() string {
+
+	return "test"
+}
+func getIsInternalUser() string {
+
+	return "test"
+}
+func getTerraformVersion(bp config.Blueprint) string {
+	// tfProviders := bp.TerraformProviders
+
+	return strconv.Itoa(len(bp.TerraformProviders))
+}
+
+func getDeployedFromSource() string {
+	return "test"
+}
+func getDeployedFromBinary() string {
+	return "test"
+}
+func getIsTestData() string {
+	return "true"
+}
+
+func getModules(bp config.Blueprint) string {
+	return strings.Join(getModulesList(bp), ",")
 }
 
 func getBlueprintName(bp config.Blueprint) string {
@@ -160,10 +204,8 @@ func getBlueprintName(bp config.Blueprint) string {
 }
 
 func getRuntime() string {
-	eventEnd := time.Now()
-	eventStart, _ := time.Parse(time.RFC3339, metadata["CLUSTER_TOOLKIT_EVENT_TIME"])
-
-	return strconv.FormatInt(eventEnd.Sub(eventStart).Milliseconds(), 10)
+	eventEndTime := time.Now()
+	return strconv.FormatInt(eventEndTime.Sub(eventStartTime).Milliseconds(), 10)
 }
 
 func getOSName() string {
