@@ -44,51 +44,38 @@ var (
 	eventStartTime time.Time
 )
 
-func logBlueprint(bp config.Blueprint) {
-	logging.Info("BlueprintName: %v\n", bp.BlueprintName)
-	logging.Info("GhpcVersion: %v\n", bp.GhpcVersion)
-	logging.Info("Validators: %v\n", bp.Validators)
-	logging.Info("ValidationLevel: %v\n", bp.ValidationLevel)
-	logging.Info("Vars: %v\n", bp.Vars)
-	logging.Info("Groups: %v\n", bp.Groups)
-	logging.Info("TerraformBackendDefaults: %v\n", bp.TerraformBackendDefaults)
-	logging.Info("TerraformProviders: %v\n", bp.TerraformProviders)
-	logging.Info("ToolkitModulesURL: %v\n", bp.ToolkitModulesURL)
-	logging.Info("ToolkitModulesVersion: %v\n", bp.ToolkitModulesVersion)
-	logging.Info("YamlCtx: %v\n", bp.YamlCtx)
-}
 func CollectPreMetrics(cmd *cobra.Command, args []string) {
 	eventStartTime = time.Now()
 	bp = getBlueprint(args)
 	logBlueprint(bp)
 
-	metadata["CLUSTER_TOOLKIT_USER_ID"] = getUserId()
-	metadata["CLUSTER_TOOLKIT_COMMAND_NAME"] = getCommandName(cmd)
-	metadata["CLUSTER_TOOLKIT_COMMAND_FLAGS"] = getCmdFlags(cmd)
-	metadata["CLUSTER_TOOLKIT_BLUEPRINT"] = getBlueprintName(bp)
-	metadata["CLUSTER_TOOLKIT_DEPLOYMENT_FILE"] = getDeploymentFile()
-	metadata["CLUSTER_TOOLKIT_BILLING_ACCOUNT"] = getBillingAccount(bp)
-	metadata["CLUSTER_TOOLKIT_IS_GKE"] = getIsGke(bp)
-	metadata["CLUSTER_TOOLKIT_IS_SLURM"] = getIsSlurm()
-	metadata["CLUSTER_TOOLKIT_IS_VM_INSTANCE"] = getIsVmInstance()
-	metadata["CLUSTER_TOOLKIT_MACHINE_TYPE"] = getMachineType()
-	metadata["CLUSTER_TOOLKIT_REGION"] = getRegion(bp)
-	metadata["CLUSTER_TOOLKIT_ZONE"] = getZone(bp)
-	metadata["CLUSTER_TOOLKIT_PROVISIONING_MODE"] = getProvisioningMode()
-	metadata["CLUSTER_TOOLKIT_MODULES"] = getModules(bp)
-	metadata["CLUSTER_TOOLKIT_OS_NAME"] = getOSName()
-	metadata["CLUSTER_TOOLKIT_OS_VERSION"] = getOSVersion()
-	metadata["CLUSTER_TOOLKIT_TERRAFORM_VERSION"] = getTerraformVersion(bp)
-	metadata["CLUSTER_TOOLKIT_IS_INTERNAL_USER"] = getIsInternalUser()
-	metadata["CLUSTER_TOOLKIT_DEPLOYED_FROM_SOURCE"] = getDeployedFromSource()
-	metadata["CLUSTER_TOOLKIT_DEPLOYED_FROM_BINARY"] = getDeployedFromBinary()
-	metadata["CLUSTER_TOOLKIT_IS_TEST_DATA"] = getIsTestData()
+	metadata[USER_ID] = getUserId()
+	metadata[COMMAND_NAME] = getCommandName(cmd)
+	metadata[COMMAND_FLAGS] = getCmdFlags(cmd)
+	metadata[BLUEPRINT] = getBlueprintName(bp)
+	metadata[DEPLOYMENT_FILE] = getDeploymentFile()
+	metadata[BILLING_ACCOUNT] = getBillingAccount(bp)
+	metadata[IS_GKE] = getIsGke(bp)
+	metadata[IS_SLURM] = getIsSlurm(bp)
+	metadata[IS_VM_INSTANCE] = getIsVmInstance()
+	metadata[MACHINE_TYPE] = getMachineType(bp)
+	metadata[REGION] = getRegion(bp)
+	metadata[ZONE] = getZone(bp)
+	metadata[PROVISIONING_MODE] = getProvisioningMode()
+	metadata[MODULES] = getModules(bp)
+	metadata[OS_NAME] = getOSName()
+	metadata[OS_VERSION] = getOSVersion()
+	metadata[TERRAFORM_VERSION] = getTerraformVersion(bp)
+	metadata[IS_INTERNAL_USER] = getIsInternalUser()
+	metadata[DEPLOYED_FROM_SOURCE] = getDeployedFromSource()
+	metadata[DEPLOYED_FROM_BINARY] = getDeployedFromBinary()
+	metadata[IS_TEST_DATA] = getIsTestData()
 
 }
 
 func CollectPostMetrics(errorCode int) {
-	metadata["CLUSTER_TOOLKIT_RUNTIME_MS"] = getRuntime()
-	metadata["CLUSTER_TOOLKIT_EXIT_CODE"] = strconv.Itoa(errorCode)
+	metadata[RUNTIME_MS] = getRuntime()
+	metadata[EXIT_CODE] = strconv.Itoa(errorCode)
 }
 
 func getUserId() string {
@@ -116,6 +103,17 @@ func getDeploymentFile() string {
 	return "test"
 }
 
+func getModulesFromPattern(pattern string, bp config.Blueprint) []config.Module {
+	modules := make([]config.Module, 0)
+	for _, m := range config.GetAllModules(&bp) {
+		matched, _ := regexp.Match(pattern, []byte(m.Source))
+		if matched {
+			modules = append(modules, m)
+		}
+	}
+	return modules
+}
+
 func getModulesList(bp config.Blueprint) []string {
 	moduleInfos := make([]config.Module, 0)
 	modules := make([]string, 0)
@@ -127,15 +125,17 @@ func getModulesList(bp config.Blueprint) []string {
 }
 
 var (
-	GkeModulePatterns   = []string{".*gke-node-pool.*", ".*gke-cluster.*"}
-	SlurmModulePatterns = []string{".*schedmd-slurm-gcp-.*"}
+	IsGkeModulePatterns           = []string{".*gke-node-pool.*", ".*gke-cluster.*"}
+	IsSlurmModulePatterns         = []string{".*schedmd-slurm-gcp-.*"}
+	GkeMachineTypeModulePattern   = ".*gke-node-pool.*"
+	SlurmMachineTypeModulePattern = ".*schedmd-slurm-gcp-.*-nodeset.*"
 )
 
 func getIsGke(bp config.Blueprint) string {
 	modules := getModulesList(bp)
 	isGke := false
 	isGke = slices.ContainsFunc(modules, func(s string) bool {
-		for _, pattern := range GkeModulePatterns {
+		for _, pattern := range IsGkeModulePatterns {
 			match, _ := regexp.MatchString(pattern, s)
 			isGke = isGke || match
 		}
@@ -144,11 +144,11 @@ func getIsGke(bp config.Blueprint) string {
 	return strconv.FormatBool(isGke)
 }
 
-func getIsSlurm() string {
+func getIsSlurm(bp config.Blueprint) string {
 	modules := getModulesList(bp)
 	isSlurm := false
 	isSlurm = slices.ContainsFunc(modules, func(s string) bool {
-		for _, pattern := range SlurmModulePatterns {
+		for _, pattern := range IsSlurmModulePatterns {
 			match, _ := regexp.MatchString(pattern, s)
 			isSlurm = isSlurm || match
 		}
@@ -161,14 +161,22 @@ func getIsVmInstance() string {
 
 	return "test"
 }
-func getMachineType() string {
 
-	return "test"
+func getMachineType(bp config.Blueprint) string {
+	machine_types := make([]string, 0)
+	modules := getModulesFromPattern(GkeMachineTypeModulePattern, bp)
+	modules = append(modules, getModulesFromPattern(SlurmMachineTypeModulePattern, bp)...)
+	for _, m := range modules {
+		machine_types = append(machine_types, m.Settings.Get("machine_type").AsString())
+	}
+	return strings.Join(machine_types, ",")
 }
 
 func getProjectId(bp config.Blueprint) string {
 	if bp.Vars.Has("project_id") {
+		logging.Info("YYYY: %v", bp.Vars.Get("project_id"))
 		return bp.Vars.Get("project_id").AsString()
+		// return ""
 	}
 	return ""
 }
@@ -245,6 +253,19 @@ func getIsTestData() string {
 }
 
 func getModules(bp config.Blueprint) string {
+	// logging.Info("\n\n\n")
+	// moduleInfos := make([]config.Module, 0)
+	// moduleInfos = append(moduleInfos, config.GetAllModules(&bp)...)
+	// for _, module := range moduleInfos {
+	// 	logging.Info("XXX: Source: %v", module.Source)
+	// 	logging.Info("XXX: Kind: %v", module.Kind)
+	// 	logging.Info("XXX: ID: %v", module.ID)
+	// 	logging.Info("XXX: Use: %v", module.Use)
+	// 	logging.Info("XXX: Outputs: %v", module.Outputs)
+	// 	logging.Info("XXX: Settings: %v", module.Settings)
+	// }
+	// logging.Info("\n\n\n")
+
 	return strings.Join(getModulesList(bp), ",")
 }
 
@@ -259,13 +280,6 @@ func getRuntime() string {
 
 func getOSName() string {
 	return runtime.GOOS
-}
-
-func getSchedulers() string {
-	schedulers := make([]string, 0)
-	schedulers = append(schedulers, "testSchedulers1")
-	schedulers = append(schedulers, "testScheduler2")
-	return strings.Join(schedulers, ",")
 }
 
 // getOSVersion returns the OS version of the current system.
@@ -340,4 +354,18 @@ func parseOsReleaseField(line string) string {
 		return ""
 	}
 	return strings.Trim(parts[1], `"`)
+}
+
+func logBlueprint(bp config.Blueprint) {
+	logging.Info("BlueprintName: %v\n", bp.BlueprintName)
+	logging.Info("GhpcVersion: %v\n", bp.GhpcVersion)
+	logging.Info("Validators: %v\n", bp.Validators)
+	logging.Info("ValidationLevel: %v\n", bp.ValidationLevel)
+	logging.Info("Vars: %v\n", bp.Vars)
+	logging.Info("Groups: %v\n", bp.Groups)
+	logging.Info("TerraformBackendDefaults: %v\n", bp.TerraformBackendDefaults)
+	logging.Info("TerraformProviders: %v\n", bp.TerraformProviders)
+	logging.Info("ToolkitModulesURL: %v\n", bp.ToolkitModulesURL)
+	logging.Info("ToolkitModulesVersion: %v\n", bp.ToolkitModulesVersion)
+	logging.Info("YamlCtx: %v\n", bp.YamlCtx)
 }
