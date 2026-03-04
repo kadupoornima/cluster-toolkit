@@ -16,6 +16,10 @@ package telemetry
 
 import (
 	"bufio"
+	"context"
+	"crypto/sha256"
+	"fmt"
+
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
 	"os"
@@ -26,6 +30,9 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	billing "cloud.google.com/go/billing/apiv1"
+	"cloud.google.com/go/billing/apiv1/billingpb"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -60,6 +67,7 @@ func CollectPreMetrics(cmd *cobra.Command, args []string) {
 	metadata["CLUSTER_TOOLKIT_COMMAND_FLAGS"] = getCmdFlags(cmd)
 	metadata["CLUSTER_TOOLKIT_BLUEPRINT"] = getBlueprintName(bp)
 	metadata["CLUSTER_TOOLKIT_DEPLOYMENT_FILE"] = getDeploymentFile()
+	metadata["CLUSTER_TOOLKIT_BILLING_ACCOUNT"] = getBillingAccount(bp)
 	metadata["CLUSTER_TOOLKIT_IS_GKE"] = getIsGke(bp)
 	metadata["CLUSTER_TOOLKIT_IS_SLURM"] = getIsSlurm()
 	metadata["CLUSTER_TOOLKIT_IS_VM_INSTANCE"] = getIsVmInstance()
@@ -156,6 +164,47 @@ func getIsVmInstance() string {
 func getMachineType() string {
 
 	return "test"
+}
+
+func getProjectId(bp config.Blueprint) string {
+	if bp.Vars.Has("project_id") {
+		return bp.Vars.Get("project_id").AsString()
+	}
+	return ""
+}
+
+// GetProjectBillingAccount fetches the billing account associated with a given GCP project in the format "billingAccounts/{billing_account_id}". If billing is disabled for the project, this will return an empty string.
+func GetProjectBillingAccount(ctx context.Context, projectID string) (string, error) {
+	client, err := billing.NewCloudBillingClient(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to create billing client: %w", err)
+	}
+	defer client.Close()
+
+	req := &billingpb.GetProjectBillingInfoRequest{
+		Name: fmt.Sprintf("projects/%s", projectID),
+	}
+
+	info, err := client.GetProjectBillingInfo(ctx, req)
+	if err != nil {
+		return "", fmt.Errorf("failed to get billing info for project %s: %w", projectID, err)
+	}
+	return info.GetBillingAccountName(), nil
+}
+
+func getBillingAccount(bp config.Blueprint) string {
+	projectID := getProjectId(bp)
+	ctx := context.Background()
+	billingAccount, err := GetProjectBillingAccount(ctx, projectID)
+	if err != nil {
+		fmt.Printf("Warning: Could not fetch billing account: %v\n", err)
+	} else if billingAccount == "" {
+		fmt.Printf("Project %s does not have an associated billing account.\n", projectID)
+	}
+	billingAccount = strings.TrimPrefix(billingAccount, "billingAccounts/")
+	// Hash the billing account ID to avoid PII.
+	billingAccountHash := sha256.Sum256([]byte(billingAccount))
+	return fmt.Sprintf("%x", billingAccountHash)[:24]
 }
 
 func getRegion(bp config.Blueprint) string {

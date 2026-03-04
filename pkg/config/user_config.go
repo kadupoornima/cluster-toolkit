@@ -17,6 +17,7 @@ package config
 import (
 	"context"
 	"crypto/sha256"
+
 	"fmt"
 	"os"
 	"os/user"
@@ -93,13 +94,11 @@ func SetTelemetry(telemetry bool) {
 func generateUniqueID() string {
 	host, _ := os.Hostname()
 	u, _ := user.Current()
-
-	// Create a stable string: "hostname-username"
 	rawID := fmt.Sprintf("%s-%s", host, u.Username)
 
-	// Hash it to create a clean, fixed-length unique ID
+	// Hash it to create a clean, fixed-length unique ID (to avoid PII)
 	hash := sha256.Sum256([]byte(rawID))
-	return fmt.Sprintf("%x", hash)[:12] // Use first 12 chars
+	return fmt.Sprintf("%x", hash)[:24]
 }
 
 // Save Viper state back to Firestore
