@@ -33,40 +33,46 @@ import (
 
 	billing "cloud.google.com/go/billing/apiv1"
 	"cloud.google.com/go/billing/apiv1/billingpb"
+	crm "google.golang.org/api/cloudresourcemanager/v1"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 )
 
 var (
-	metadata       = make(map[string]string)
-	bp             config.Blueprint
-	eventStartTime time.Time
+	metadata                      = make(map[string]string)
+	blueprint                     config.Blueprint
+	eventStartTime                time.Time
+	IsGkeModulePatterns           = []string{".*gke-node-pool.*", ".*gke-cluster.*"}
+	IsSlurmModulePatterns         = []string{".*schedmd-slurm-gcp-.*"}
+	GkeMachineTypeModulePattern   = ".*gke-node-pool.*"
+	SlurmMachineTypeModulePattern = ".*schedmd-slurm-gcp-.*-nodeset.*"
 )
+
+// googleOrgID is the canonical Google.com organization ID
+const googleOrgID = "433637338589"
 
 func CollectPreMetrics(cmd *cobra.Command, args []string) {
 	eventStartTime = time.Now()
-	bp = getBlueprint(args)
-	logBlueprint(bp)
+	blueprint = getBlueprint(args)
+	logBlueprint(blueprint)
 
 	metadata[USER_ID] = getUserId()
 	metadata[COMMAND_NAME] = getCommandName(cmd)
 	metadata[COMMAND_FLAGS] = getCmdFlags(cmd)
-	metadata[BLUEPRINT] = getBlueprintName(bp)
+	metadata[BLUEPRINT] = getBlueprintName()
 	metadata[DEPLOYMENT_FILE] = getDeploymentFile()
-	metadata[BILLING_ACCOUNT] = getBillingAccount(bp)
-	metadata[IS_GKE] = getIsGke(bp)
-	metadata[IS_SLURM] = getIsSlurm(bp)
+	metadata[IS_GKE] = getIsGke()
+	metadata[IS_SLURM] = getIsSlurm()
 	metadata[IS_VM_INSTANCE] = getIsVmInstance()
-	metadata[MACHINE_TYPE] = getMachineType(bp)
-	metadata[REGION] = getRegion(bp)
-	metadata[ZONE] = getZone(bp)
+	metadata[MACHINE_TYPE] = getMachineType()
+	metadata[REGION] = getRegion()
+	metadata[ZONE] = getZone()
 	metadata[PROVISIONING_MODE] = getProvisioningMode()
-	metadata[MODULES] = getModules(bp)
+	metadata[MODULES] = getModules()
 	metadata[OS_NAME] = getOSName()
 	metadata[OS_VERSION] = getOSVersion()
-	metadata[TERRAFORM_VERSION] = getTerraformVersion(bp)
-	metadata[IS_INTERNAL_USER] = getIsInternalUser()
+	metadata[TERRAFORM_VERSION] = getTerraformVersion()
 	metadata[DEPLOYED_FROM_SOURCE] = getDeployedFromSource()
 	metadata[DEPLOYED_FROM_BINARY] = getDeployedFromBinary()
 	metadata[IS_TEST_DATA] = getIsTestData()
@@ -76,6 +82,9 @@ func CollectPreMetrics(cmd *cobra.Command, args []string) {
 func CollectPostMetrics(errorCode int) {
 	metadata[RUNTIME_MS] = getRuntime()
 	metadata[EXIT_CODE] = strconv.Itoa(errorCode)
+	// Collecting these metrics after the run to ensure the API calls do not add additional latency.
+	metadata[BILLING_ACCOUNT] = getBillingAccount()
+	metadata[IS_INTERNAL_USER] = getIsInternalUser()
 }
 
 func getUserId() string {
@@ -94,13 +103,184 @@ func getCmdFlags(cmd *cobra.Command) string {
 	return strings.Join(flags, ",")
 }
 
-func getBlueprint(args []string) config.Blueprint {
-	bp, _, _ := config.NewBlueprint(args[0])
-	return bp
+func getBlueprintName() string {
+	return blueprint.BlueprintName
 }
+
 func getDeploymentFile() string {
 
 	return "test"
+}
+
+func getIsGke() string {
+	modules := getModulesList(blueprint)
+	isGke := false
+	isGke = slices.ContainsFunc(modules, func(s string) bool {
+		for _, pattern := range IsGkeModulePatterns {
+			match, _ := regexp.MatchString(pattern, s)
+			isGke = isGke || match
+		}
+		return isGke
+	})
+	return strconv.FormatBool(isGke)
+}
+
+func getIsSlurm() string {
+	modules := getModulesList(blueprint)
+	isSlurm := false
+	isSlurm = slices.ContainsFunc(modules, func(s string) bool {
+		for _, pattern := range IsSlurmModulePatterns {
+			match, _ := regexp.MatchString(pattern, s)
+			isSlurm = isSlurm || match
+		}
+		return isSlurm
+	})
+	return strconv.FormatBool(isSlurm)
+}
+
+func getIsVmInstance() string {
+
+	return "test"
+}
+func getMachineType() string {
+	machine_types := make([]string, 0)
+	modules := getModulesFromPattern(GkeMachineTypeModulePattern, blueprint)
+	modules = append(modules, getModulesFromPattern(SlurmMachineTypeModulePattern, blueprint)...)
+	for _, m := range modules {
+		machine_types = append(machine_types, m.Settings.Get("machine_type").AsString())
+	}
+	return strings.Join(machine_types, ",")
+}
+
+func getRegion() string {
+	if blueprint.Vars.Has("region") {
+		return blueprint.Vars.Get("region").AsString()
+	}
+	return ""
+}
+
+func getZone() string {
+	if blueprint.Vars.Has("zone") {
+		return blueprint.Vars.Get("zone").AsString()
+	}
+	return ""
+}
+
+func getProvisioningMode() string {
+
+	return "test"
+}
+
+func getModules() string {
+	// logging.Info("\n\n\n")
+	// moduleInfos := make([]config.Module, 0)
+	// moduleInfos = append(moduleInfos, config.GetAllModules(&bp)...)
+	// for _, module := range moduleInfos {
+	// 	logging.Info("XXX: Source: %v", module.Source)
+	// 	logging.Info("XXX: Kind: %v", module.Kind)
+	// 	logging.Info("XXX: ID: %v", module.ID)
+	// 	logging.Info("XXX: Use: %v", module.Use)
+	// 	logging.Info("XXX: Outputs: %v", module.Outputs)
+	// 	logging.Info("XXX: Settings: %v", module.Settings)
+	// }
+	// logging.Info("\n\n\n")
+
+	return strings.Join(getModulesList(blueprint), ",")
+}
+
+func getOSName() string {
+	return runtime.GOOS
+}
+
+// getOSVersion returns the OS version of the current system.
+func getOSVersion() string {
+	switch runtime.GOOS {
+	case "linux":
+		return getLinuxVersion()
+	case "darwin":
+		return getMacVersion()
+	case "windows":
+		return getWindowsVersion()
+	default:
+		return ""
+	}
+}
+
+func getTerraformVersion() string {
+	// tfProviders := blueprint.TerraformProviders
+
+	return strconv.Itoa(len(blueprint.TerraformProviders))
+}
+
+func getDeployedFromSource() string {
+	return "test"
+}
+
+func getDeployedFromBinary() string {
+	return "test"
+}
+
+func getIsTestData() string {
+	return "true"
+}
+
+func getBillingAccount() string {
+	projectID := getProjectId(blueprint)
+	ctx := context.Background()
+	billingAccount, err := getProjectBillingAccount(ctx, projectID)
+	if err != nil {
+		fmt.Printf("Warning: Could not fetch billing account: %v\n", err)
+	} else if billingAccount == "" {
+		fmt.Printf("Project %s does not have an associated billing account.\n", projectID)
+	}
+	billingAccount = strings.TrimPrefix(billingAccount, "billingAccounts/")
+	// Hash the billing account ID to avoid PII.
+	billingAccountHash := sha256.Sum256([]byte(billingAccount))
+	return fmt.Sprintf("%x", billingAccountHash)[:24]
+}
+
+// getIsInternalUser returns "true" if the GCP project belongs to the Google.com organization.
+func getIsInternalUser() string {
+	projectID := getProjectId(blueprint)
+	if projectID == "" {
+		return "false"
+	}
+	ctx := context.Background()
+	service, err := crm.NewService(ctx)
+	if err != nil {
+		return "false"
+	}
+
+	// Fetch the ancestry of the project
+	req := &crm.GetAncestryRequest{}
+	resp, err := service.Projects.GetAncestry(projectID, req).Do()
+	if err != nil {
+		// This can fail if the user lacks IAM permissions or the project doesn't exist
+		return "false"
+	}
+
+	// Traverse the ancestors from bottom (the project) to top (the organization)
+	for _, ancestor := range resp.Ancestor {
+		if ancestor.ResourceId.Type == "organization" && ancestor.ResourceId.Id == googleOrgID {
+			return "true"
+		}
+	}
+
+	return "false"
+}
+
+func getRuntime() string {
+	eventEndTime := time.Now()
+	return strconv.FormatInt(eventEndTime.Sub(eventStartTime).Milliseconds(), 10)
+}
+
+/****************************************************************************************************/
+/************************************** Utility functions *******************************************/
+/****************************************************************************************************/
+
+func getBlueprint(args []string) config.Blueprint {
+	bp, _, _ := config.NewBlueprint(args[0])
+	return bp
 }
 
 func getModulesFromPattern(pattern string, bp config.Blueprint) []config.Module {
@@ -124,54 +304,6 @@ func getModulesList(bp config.Blueprint) []string {
 	return modules
 }
 
-var (
-	IsGkeModulePatterns           = []string{".*gke-node-pool.*", ".*gke-cluster.*"}
-	IsSlurmModulePatterns         = []string{".*schedmd-slurm-gcp-.*"}
-	GkeMachineTypeModulePattern   = ".*gke-node-pool.*"
-	SlurmMachineTypeModulePattern = ".*schedmd-slurm-gcp-.*-nodeset.*"
-)
-
-func getIsGke(bp config.Blueprint) string {
-	modules := getModulesList(bp)
-	isGke := false
-	isGke = slices.ContainsFunc(modules, func(s string) bool {
-		for _, pattern := range IsGkeModulePatterns {
-			match, _ := regexp.MatchString(pattern, s)
-			isGke = isGke || match
-		}
-		return isGke
-	})
-	return strconv.FormatBool(isGke)
-}
-
-func getIsSlurm(bp config.Blueprint) string {
-	modules := getModulesList(bp)
-	isSlurm := false
-	isSlurm = slices.ContainsFunc(modules, func(s string) bool {
-		for _, pattern := range IsSlurmModulePatterns {
-			match, _ := regexp.MatchString(pattern, s)
-			isSlurm = isSlurm || match
-		}
-		return isSlurm
-	})
-	return strconv.FormatBool(isSlurm)
-}
-
-func getIsVmInstance() string {
-
-	return "test"
-}
-
-func getMachineType(bp config.Blueprint) string {
-	machine_types := make([]string, 0)
-	modules := getModulesFromPattern(GkeMachineTypeModulePattern, bp)
-	modules = append(modules, getModulesFromPattern(SlurmMachineTypeModulePattern, bp)...)
-	for _, m := range modules {
-		machine_types = append(machine_types, m.Settings.Get("machine_type").AsString())
-	}
-	return strings.Join(machine_types, ",")
-}
-
 func getProjectId(bp config.Blueprint) string {
 	if bp.Vars.Has("project_id") {
 		logging.Info("YYYY: %v", bp.Vars.Get("project_id"))
@@ -181,8 +313,8 @@ func getProjectId(bp config.Blueprint) string {
 	return ""
 }
 
-// GetProjectBillingAccount fetches the billing account associated with a given GCP project in the format "billingAccounts/{billing_account_id}". If billing is disabled for the project, this will return an empty string.
-func GetProjectBillingAccount(ctx context.Context, projectID string) (string, error) {
+// getProjectBillingAccount fetches the billing account associated with a given GCP project in the format "billingAccounts/{billing_account_id}". If billing is disabled for the project, this will return an empty string.
+func getProjectBillingAccount(ctx context.Context, projectID string) (string, error) {
 	client, err := billing.NewCloudBillingClient(ctx)
 	if err != nil {
 		return "", fmt.Errorf("failed to create billing client: %w", err)
@@ -198,102 +330,6 @@ func GetProjectBillingAccount(ctx context.Context, projectID string) (string, er
 		return "", fmt.Errorf("failed to get billing info for project %s: %w", projectID, err)
 	}
 	return info.GetBillingAccountName(), nil
-}
-
-func getBillingAccount(bp config.Blueprint) string {
-	projectID := getProjectId(bp)
-	ctx := context.Background()
-	billingAccount, err := GetProjectBillingAccount(ctx, projectID)
-	if err != nil {
-		fmt.Printf("Warning: Could not fetch billing account: %v\n", err)
-	} else if billingAccount == "" {
-		fmt.Printf("Project %s does not have an associated billing account.\n", projectID)
-	}
-	billingAccount = strings.TrimPrefix(billingAccount, "billingAccounts/")
-	// Hash the billing account ID to avoid PII.
-	billingAccountHash := sha256.Sum256([]byte(billingAccount))
-	return fmt.Sprintf("%x", billingAccountHash)[:24]
-}
-
-func getRegion(bp config.Blueprint) string {
-	if bp.Vars.Has("region") {
-		return bp.Vars.Get("region").AsString()
-	}
-	return ""
-}
-
-func getZone(bp config.Blueprint) string {
-	if bp.Vars.Has("zone") {
-		return bp.Vars.Get("zone").AsString()
-	}
-	return ""
-}
-func getProvisioningMode() string {
-
-	return "test"
-}
-func getIsInternalUser() string {
-
-	return "test"
-}
-func getTerraformVersion(bp config.Blueprint) string {
-	// tfProviders := bp.TerraformProviders
-
-	return strconv.Itoa(len(bp.TerraformProviders))
-}
-
-func getDeployedFromSource() string {
-	return "test"
-}
-func getDeployedFromBinary() string {
-	return "test"
-}
-func getIsTestData() string {
-	return "true"
-}
-
-func getModules(bp config.Blueprint) string {
-	// logging.Info("\n\n\n")
-	// moduleInfos := make([]config.Module, 0)
-	// moduleInfos = append(moduleInfos, config.GetAllModules(&bp)...)
-	// for _, module := range moduleInfos {
-	// 	logging.Info("XXX: Source: %v", module.Source)
-	// 	logging.Info("XXX: Kind: %v", module.Kind)
-	// 	logging.Info("XXX: ID: %v", module.ID)
-	// 	logging.Info("XXX: Use: %v", module.Use)
-	// 	logging.Info("XXX: Outputs: %v", module.Outputs)
-	// 	logging.Info("XXX: Settings: %v", module.Settings)
-	// }
-	// logging.Info("\n\n\n")
-
-	return strings.Join(getModulesList(bp), ",")
-}
-
-func getBlueprintName(bp config.Blueprint) string {
-	return bp.BlueprintName
-}
-
-func getRuntime() string {
-	eventEndTime := time.Now()
-	return strconv.FormatInt(eventEndTime.Sub(eventStartTime).Milliseconds(), 10)
-}
-
-func getOSName() string {
-	return runtime.GOOS
-}
-
-// getOSVersion returns the OS version of the current system.
-func getOSVersion() string {
-	switch runtime.GOOS {
-	case "linux":
-		return getLinuxVersion()
-	case "darwin":
-		return getMacVersion()
-	case "windows":
-		return getWindowsVersion()
-	default:
-		return ""
-	}
 }
 
 // getLinuxVersion parses /etc/os-release to find the pretty name or version ID.
