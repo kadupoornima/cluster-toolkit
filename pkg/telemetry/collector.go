@@ -19,6 +19,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"hpc-toolkit/pkg/shell"
 
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
@@ -216,9 +217,11 @@ func getOSVersion() string {
 }
 
 func getTerraformVersion() string {
-	// tfProviders := blueprint.TerraformProviders
-
-	return strconv.Itoa(len(blueprint.TerraformProviders))
+	version, err := shell.TfVersion()
+	if err != nil {
+		logging.Error("Unable to get Terraform version, %v", err)
+	}
+	return version
 }
 
 func getDeployedFromSource() string {
