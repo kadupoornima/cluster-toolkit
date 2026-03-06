@@ -34,7 +34,6 @@ func Flush(payload LogRequest) {
 	PrintLogRequest(payload) // remove
 
 	jsonData, err := json.Marshal(payload)
-
 	if err != nil {
 		fmt.Printf("Error marshalling JSON: %v\n", err)
 		return
@@ -45,7 +44,6 @@ func Flush(payload LogRequest) {
 	}
 
 	resp, reqErr := client.Post(HttpDummy, "application/json", strings.NewReader(string(jsonData)))
-
 	if reqErr != nil {
 		fmt.Printf("Request failed: %v\n", reqErr)
 		return
@@ -62,14 +60,10 @@ func Flush(payload LogRequest) {
 		fmt.Printf("Error creating request: %v\n", err)
 		return
 	}
-
-	// Replace "MyUserAgent/1.0" with your actual get_user_agent() logic
-	req.Header.Set("User-Agent", "MyUserAgent/1.0")
+	req.Header.Set("User-Agent", fmt.Sprintf("CLUSTER_TOOLKIT/%v", config.GetToolkitVersion()))
 	req.Header.Set("Content-Type", "application/json")
 
-	logging.Info("\n\n\nRequest: %v\n", req)
 	resp2, err2 := client.Do(req)
-	// resp2, reqErr2 := client.Post(ClearcutProdURL, "application/json", strings.NewReader(string(jsonData)))
 
 	if err2 != nil {
 		logging.Error("Error sending request: %v\n", err)
@@ -77,7 +71,6 @@ func Flush(payload LogRequest) {
 	}
 	defer resp2.Body.Close()
 
-	// Handle Response
 	body, _ := io.ReadAll(resp2.Body)
 	logging.Info("Status: %v\n", resp2.Status)
 	logging.Info("Response: %v\n", string(body))

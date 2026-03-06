@@ -17,7 +17,7 @@
 blueprint_name: h4d-cluster
 
 vars:
-  project_id: ## Set GCP Project ID Here ##
+  project_id: hpc-toolkit-gsc
   deployment_name: h4d-cluster
   region: us-central1
   zone: us-central1-a

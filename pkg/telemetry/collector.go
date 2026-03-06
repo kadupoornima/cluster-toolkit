@@ -40,13 +40,14 @@ import (
 )
 
 var (
-	metadata                      = make(map[string]string)
-	blueprint                     config.Blueprint
-	eventStartTime                time.Time
-	IsGkeModulePatterns           = []string{".*gke-node-pool.*", ".*gke-cluster.*"}
-	IsSlurmModulePatterns         = []string{".*schedmd-slurm-gcp-.*"}
-	GkeMachineTypeModulePattern   = ".*gke-node-pool.*"
-	SlurmMachineTypeModulePattern = ".*schedmd-slurm-gcp-.*-nodeset.*"
+	metadata                   = make(map[string]string)
+	blueprint                  config.Blueprint
+	modulesList                []string
+	eventStartTime             time.Time
+	IsGkeModulePatterns        = []string{".*gke-node-pool.*", ".*gke-cluster.*"}
+	IsSlurmModulePatterns      = []string{".*schedmd-slurm-gcp-.*"}
+	IsVmInstanceModulePatterns = []string{".*compute/vm-instance.*"}
+	MachineTypeModulePatterns  = []string{".*gke-node-pool.*", ".*schedmd-slurm-gcp-.*-nodeset.*", ".*compute/vm-instance.*"} // module patterns where machine_type can be specified
 )
 
 // googleOrgID is the canonical Google.com organization ID
@@ -55,6 +56,7 @@ const googleOrgID = "433637338589"
 func CollectPreMetrics(cmd *cobra.Command, args []string) {
 	eventStartTime = time.Now()
 	blueprint = getBlueprint(args)
+	modulesList = getModulesList(blueprint)
 	logBlueprint(blueprint)
 
 	metadata[USER_ID] = getUserId()
@@ -113,9 +115,8 @@ func getDeploymentFile() string {
 }
 
 func getIsGke() string {
-	modules := getModulesList(blueprint)
 	isGke := false
-	isGke = slices.ContainsFunc(modules, func(s string) bool {
+	isGke = slices.ContainsFunc(modulesList, func(s string) bool {
 		for _, pattern := range IsGkeModulePatterns {
 			match, _ := regexp.MatchString(pattern, s)
 			isGke = isGke || match
@@ -126,9 +127,8 @@ func getIsGke() string {
 }
 
 func getIsSlurm() string {
-	modules := getModulesList(blueprint)
 	isSlurm := false
-	isSlurm = slices.ContainsFunc(modules, func(s string) bool {
+	isSlurm = slices.ContainsFunc(modulesList, func(s string) bool {
 		for _, pattern := range IsSlurmModulePatterns {
 			match, _ := regexp.MatchString(pattern, s)
 			isSlurm = isSlurm || match
@@ -139,15 +139,24 @@ func getIsSlurm() string {
 }
 
 func getIsVmInstance() string {
-
-	return "test"
+	isSlurm := false
+	isSlurm = slices.ContainsFunc(modulesList, func(s string) bool {
+		for _, pattern := range IsVmInstanceModulePatterns {
+			match, _ := regexp.MatchString(pattern, s)
+			isSlurm = isSlurm || match
+		}
+		return isSlurm
+	})
+	return strconv.FormatBool(isSlurm)
 }
+
 func getMachineType() string {
 	machine_types := make([]string, 0)
-	modules := getModulesFromPattern(GkeMachineTypeModulePattern, blueprint)
-	modules = append(modules, getModulesFromPattern(SlurmMachineTypeModulePattern, blueprint)...)
+	modules := getModulesFromPatterns(MachineTypeModulePatterns)
 	for _, m := range modules {
-		machine_types = append(machine_types, m.Settings.Get("machine_type").AsString())
+		if m.Settings.Has("machine_type") {
+			machine_types = append(machine_types, m.Settings.Get("machine_type").AsString())
+		}
 	}
 	return strings.Join(machine_types, ",")
 }
@@ -283,12 +292,14 @@ func getBlueprint(args []string) config.Blueprint {
 	return bp
 }
 
-func getModulesFromPattern(pattern string, bp config.Blueprint) []config.Module {
+func getModulesFromPatterns(patterns []string) []config.Module {
 	modules := make([]config.Module, 0)
-	for _, m := range config.GetAllModules(&bp) {
-		matched, _ := regexp.Match(pattern, []byte(m.Source))
-		if matched {
-			modules = append(modules, m)
+	for _, m := range config.GetAllModules(&blueprint) {
+		for _, p := range patterns {
+			matched, _ := regexp.Match(p, []byte(m.Source))
+			if matched {
+				modules = append(modules, m)
+			}
 		}
 	}
 	return modules
@@ -306,9 +317,7 @@ func getModulesList(bp config.Blueprint) []string {
 
 func getProjectId(bp config.Blueprint) string {
 	if bp.Vars.Has("project_id") {
-		logging.Info("YYYY: %v", bp.Vars.Get("project_id"))
 		return bp.Vars.Get("project_id").AsString()
-		// return ""
 	}
 	return ""
 }
