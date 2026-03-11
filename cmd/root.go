@@ -35,11 +35,12 @@ import (
 
 // Git references when use Makefile
 var (
-	GitTagVersion  string
-	GitBranch      string
-	GitCommitInfo  string
-	GitCommitHash  string
-	GitInitialHash string
+	GitTagVersion      string
+	GitBranch          string
+	GitCommitInfo      string
+	GitCommitHash      string
+	GitInitialHash     string
+	telemetryCollector *telemetry.Collector
 )
 
 var (
@@ -68,7 +69,7 @@ func init() {
 			logging.Error("Failure in initializing user config: %v", err)
 		}
 		initColor()
-		telemetry.Initialize(cmd, args)
+		telemetryCollector = telemetry.NewCollector(cmd, args)
 	}
 }
 
@@ -118,7 +119,7 @@ Commit info: {{index .Annotations "commitInfo"}}
 		}
 	}
 	if config.IsTelemetryEnabled() {
-		telemetry.Finalize(exitCode)
+		telemetryCollector.Execute(exitCode)
 	}
 	return err
 }

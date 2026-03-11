@@ -14,28 +14,44 @@
 
 package telemetry
 
-import "time"
+import (
+	"time"
+
+	"hpc-toolkit/pkg/config"
+	"sync"
+
+	"github.com/spf13/cobra"
+)
 
 const (
-	ClearcutProdURL       = "https://play.googleapis.com/log"
+	ClearcutProdURL   = "https://play.googleapis.com/log"
+	ClientType        = "CLUSTER_TOOLKIT"
+	configDirName     = "cluster-toolkit"
+	HttpServerTimeout = 10 * time.Second
+	CLUSTER_TOOLKIT   = "CLUSTER_TOOLKIT"
+	CONCORD           = "CONCORD"
+)
+
+const (
 	ClearcutStagingURL    = "https://play.googleapis.com/staging/log"
+	ClearcutProdJsonURL   = "https://play.google.com/log?format=json_proto"
 	ClearcutAltProdURL    = "https://play.google.com/log?format=json&hasfast=true"
 	ClearcutAltStagingURL = "https://play.google.com/staging/log?format=json&hasfast=true"
 	ClearcutLocalURL      = "http://localhost:27910/log"
 	HttpDummy             = "http://127.0.0.1:8888"
 	LogSourceEnum         = 113
-	ClientType            = "CLUSTER_TOOLKIT"
-	configDirName         = "cluster-toolkit"
-	HttpServerTimeout     = 10 * time.Second
 )
 
-type ClientInfo struct {
-	ClientType string `json:"client_type"`
-}
+// Collector encapsulates the telemetry state (avoids global variables).
+type Collector struct {
+	eventCmd       *cobra.Command
+	eventArgs      []string
+	eventStartTime time.Time
+	blueprint      config.Blueprint
+	modulesList    []string
+	metadata       map[string]string
 
-type LogEvent struct {
-	EventTimeMs         int64  `json:"event_time_ms"`
-	SourceExtensionJson string `json:"source_extension_json"` // Contains event metadata as key-value pairs.
+	mu sync.Mutex // Protects state against concurrent access
 }
 
 type LogRequest struct {
@@ -45,9 +61,28 @@ type LogRequest struct {
 	LogEvent      []LogEvent `json:"log_event"`
 }
 
+type LogEvent struct {
+	EventTimeMs         int64  `json:"event_time_ms"`
+	SourceExtensionJson string `json:"source_extension_json"` // ConcordEvent format.
+}
+
+type ConcordEvent struct {
+	ConsoleType     string              `json:"console_type"`
+	EventType       string              `json:"event_type"`
+	EventName       string              `json:"event_name"`
+	EventMetadata   []map[string]string `json:"event_metadata"`
+	LatencyMs       int64               `json:"latency_ms"`
+	ProjectNumber   string              `json:"project_number"`
+	ClientInstallId string              `json:"client_install_id"`
+	IsGoogler       bool                `json:"is_googler"`
+	ReleaseVersion  string              `json:"release_version"`
+}
+
+type ClientInfo struct {
+	ClientType string `json:"client_type"`
+}
+
 const (
-	USER_ID              = "CLUSTER_TOOLKIT_USER_ID"
-	COMMAND_NAME         = "CLUSTER_TOOLKIT_COMMAND_NAME"
 	COMMAND_FLAGS        = "CLUSTER_TOOLKIT_COMMAND_FLAGS"
 	BLUEPRINT            = "CLUSTER_TOOLKIT_BLUEPRINT"
 	DEPLOYMENT_FILE      = "CLUSTER_TOOLKIT_DEPLOYMENT_FILE"
@@ -63,10 +98,8 @@ const (
 	OS_NAME              = "CLUSTER_TOOLKIT_OS_NAME"
 	OS_VERSION           = "CLUSTER_TOOLKIT_OS_VERSION"
 	TERRAFORM_VERSION    = "CLUSTER_TOOLKIT_TERRAFORM_VERSION"
-	IS_INTERNAL_USER     = "CLUSTER_TOOLKIT_IS_INTERNAL_USER"
 	DEPLOYED_FROM_SOURCE = "CLUSTER_TOOLKIT_DEPLOYED_FROM_SOURCE"
 	DEPLOYED_FROM_BINARY = "CLUSTER_TOOLKIT_DEPLOYED_FROM_BINARY"
 	IS_TEST_DATA         = "CLUSTER_TOOLKIT_IS_TEST_DATA"
-	RUNTIME_MS           = "CLUSTER_TOOLKIT_RUNTIME_MS"
 	EXIT_CODE            = "CLUSTER_TOOLKIT_EXIT_CODE"
 )

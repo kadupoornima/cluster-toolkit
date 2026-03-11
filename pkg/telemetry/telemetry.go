@@ -12,45 +12,25 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// The following implementation is done for sending one LogEvent per LogRequest as per the telemetry logic.
+// The following implementation is done for sending one LogEvent per LogRequest as required by the telemetry logic.
 
 package telemetry
 
 import (
 	"encoding/json"
-	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
 	"time"
-
-	"github.com/spf13/cobra"
 )
 
-const (
-	CLUSTER_TOOLKIT string = "CLUSTER_TOOLKIT"
-	CONCORD         string = "CONCORD"
-)
-
-var (
-	eventMetadata []map[string]string = make([]map[string]string, 0)
-)
-
-func Initialize(cmd *cobra.Command, args []string) {
-	CollectPreMetrics(cmd, args)
-}
-
-func Finalize(exitCode int) {
-	CollectPostMetrics(exitCode)
-	payload := ConstructPayload()
+func (c *Collector) Execute(exitCode int) {
+	c.CollectMetrics(exitCode)
+	concordEvent := c.BuildConcordEvent()
+	payload := BuildPayload(concordEvent)
 	Flush(payload)
 }
 
-func ConstructPayload() LogRequest {
-	sourceExtensionJSON, err := json.Marshal(map[string]any{
-		"event_type":      "GCluster CLI",
-		"console_type":    CLUSTER_TOOLKIT,
-		"release_version": config.GetToolkitVersion(),
-		"event_metadata":  getEventMetadataKVPairs(),
-	})
+func BuildPayload(concordEvent ConcordEvent) LogRequest {
+	sourceExtensionJSON, err := json.Marshal(concordEvent)
 	if err != nil {
 		logging.Error("Error collecting telemetry event metadata: %v", err)
 		return LogRequest{}
@@ -70,16 +50,7 @@ func ConstructPayload() LogRequest {
 	return logRequest
 }
 
-func getEventMetadataKVPairs() []map[string]string {
-	for k, v := range metadata {
-		eventMetadata = append(eventMetadata, map[string]string{
-			"key":   k,
-			"value": v,
-		})
-	}
-	return eventMetadata
-}
-
 func PrintLogRequest(logRequest LogRequest) {
-	logging.Info("logRequest: %v", logRequest)
+	l, _ := json.Marshal(logRequest)
+	logging.Info("logRequest: %v", string(l))
 }

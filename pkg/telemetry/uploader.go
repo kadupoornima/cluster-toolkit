@@ -43,12 +43,14 @@ func Flush(payload LogRequest) {
 		Timeout: HttpServerTimeout,
 	}
 
+	// dummy request
 	resp, reqErr := client.Post(HttpDummy, "application/json", strings.NewReader(string(jsonData)))
 	if reqErr != nil {
 		fmt.Printf("Request failed: %v\n", reqErr)
 		return
 	}
 	resp.Body.Close()
+	// end
 
 	u, _ := url.Parse(ClearcutProdURL)
 	params := url.Values{}
@@ -60,7 +62,7 @@ func Flush(payload LogRequest) {
 		fmt.Printf("Error creating request: %v\n", err)
 		return
 	}
-	req.Header.Set("User-Agent", fmt.Sprintf("CLUSTER_TOOLKIT/%v", config.GetToolkitVersion()))
+	req.Header.Set("User-Agent", fmt.Sprintf("%v/%v", CLUSTER_TOOLKIT, config.GetToolkitVersion()))
 	req.Header.Set("Content-Type", "application/json")
 
 	resp2, err2 := client.Do(req)

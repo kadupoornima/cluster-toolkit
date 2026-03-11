@@ -32,7 +32,6 @@ import (
 	"golang.org/x/exp/maps"
 	"gopkg.in/yaml.v3"
 
-	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/modulereader"
 )
 
@@ -959,24 +958,11 @@ func (bp *Blueprint) evalVars() (Dict, error) {
 	return NewDict(res), nil
 }
 
-func GetBlueprintName(path string) string {
-	bp, _, err := NewBlueprint(path)
-	if err != nil {
-		logging.Error("%v", err)
-		return ""
-	}
-	return bp.BlueprintName
-}
-
 // GetAllModules returns a slice of all modules defined in the blueprint.
 func GetAllModules(bp *Blueprint) []Module {
 	var modules []Module
 	bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
-		modules = append(modules, *m) // Create a copy of the module
+		modules = append(modules, *m)
 	})
 	return modules
-}
-
-func GetOSVersion() {
-
 }
