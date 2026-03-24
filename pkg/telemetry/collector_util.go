@@ -51,10 +51,10 @@ func getModulesWithPattern(pattern string, bp config.Blueprint) []config.Module 
 	for _, m := range config.GetAllModules(&bp) {
 		matched, _ := regexp.Match(pattern, []byte(m.Source))
 		if matched {
-			logging.Info("Source: %v", m.Source)
-			logging.Info("Items: %v", m.Settings.Items())
+			// logging.Info("Source: %v", m.Source)
+			// logging.Info("Items: %v", m.Settings.Items())
 			// logging.Info("%v", m.Settings.Get("machine_type").GetAttr())
-			logging.Info("Keys: %v", m.Settings.Keys())
+			// logging.Info("Keys: %v", m.Settings.Keys())
 			modules = append(modules, m)
 		}
 	}

@@ -67,15 +67,16 @@ type LogEvent struct {
 }
 
 type ConcordEvent struct {
-	ConsoleType     string              `json:"console_type"`
-	EventType       string              `json:"event_type"`
-	EventName       string              `json:"event_name"`
-	EventMetadata   []map[string]string `json:"event_metadata"`
-	LatencyMs       int64               `json:"latency_ms"`
-	ProjectNumber   string              `json:"project_number"`
-	ClientInstallId string              `json:"client_install_id"`
-	IsGoogler       bool                `json:"is_googler"`
-	ReleaseVersion  string              `json:"release_version"`
+	ConsoleType      string              `json:"console_type"`
+	EventType        string              `json:"event_type"`
+	EventName        string              `json:"event_name"`
+	EventMetadata    []map[string]string `json:"event_metadata"`
+	LatencyMs        int64               `json:"latency_ms"`
+	ProjectNumber    string              `json:"project_number"`
+	ClientInstallId  string              `json:"client_install_id"`
+	BillingAccountId string              `json:"billing_account_id"`
+	IsGoogler        bool                `json:"is_googler"`
+	ReleaseVersion   string              `json:"release_version"`
 }
 
 type ClientInfo struct {
@@ -86,7 +87,6 @@ const (
 	COMMAND_FLAGS        = "CLUSTER_TOOLKIT_COMMAND_FLAGS"
 	BLUEPRINT            = "CLUSTER_TOOLKIT_BLUEPRINT"
 	DEPLOYMENT_FILE      = "CLUSTER_TOOLKIT_DEPLOYMENT_FILE"
-	BILLING_ACCOUNT      = "CLUSTER_TOOLKIT_BILLING_ACCOUNT"
 	IS_GKE               = "CLUSTER_TOOLKIT_IS_GKE"
 	IS_SLURM             = "CLUSTER_TOOLKIT_IS_SLURM"
 	IS_VM_INSTANCE       = "CLUSTER_TOOLKIT_IS_VM_INSTANCE"

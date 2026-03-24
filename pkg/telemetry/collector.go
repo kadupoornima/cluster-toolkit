@@ -16,7 +16,6 @@ package telemetry
 
 import (
 	"context"
-	"crypto/sha256"
 	"fmt"
 
 	resourcemanager "cloud.google.com/go/resourcemanager/apiv3"
@@ -81,7 +80,6 @@ func (c *Collector) CollectMetrics(errorCode int) {
 	c.metadata[DEPLOYED_FROM_BINARY] = getDeployedFromBinary()
 	c.metadata[IS_TEST_DATA] = getIsTestData()
 	c.metadata[EXIT_CODE] = strconv.Itoa(errorCode)
-	c.metadata[BILLING_ACCOUNT] = getBillingAccount(c.blueprint)
 }
 
 func (c *Collector) BuildConcordEvent() ConcordEvent {
@@ -89,15 +87,16 @@ func (c *Collector) BuildConcordEvent() ConcordEvent {
 	defer c.mu.Unlock()
 
 	return ConcordEvent{
-		ConsoleType:     CLUSTER_TOOLKIT,
-		EventType:       "gclusterCLI",
-		EventName:       getCommandName(c.eventCmd),
-		EventMetadata:   getEventMetadataKVPairs(c.metadata),
-		LatencyMs:       getLatencyMs(c.eventStartTime),
-		ProjectNumber:   getProjectNumber(c.blueprint),
-		ClientInstallId: getClientInstallId(),
-		IsGoogler:       getIsGoogler(c.blueprint),
-		ReleaseVersion:  getReleaseVersion(),
+		ConsoleType:      CLUSTER_TOOLKIT,
+		EventType:        "gclusterCLI",
+		EventName:        getCommandName(c.eventCmd),
+		EventMetadata:    getEventMetadataKVPairs(c.metadata),
+		LatencyMs:        getLatencyMs(c.eventStartTime),
+		ProjectNumber:    getProjectNumber(c.blueprint),
+		ClientInstallId:  getClientInstallId(),
+		BillingAccountId: getBillingAccountId(c.blueprint),
+		IsGoogler:        getIsGoogler(c.blueprint),
+		ReleaseVersion:   getReleaseVersion(),
 	}
 }
 
@@ -408,7 +407,7 @@ func getIsTestData() string {
 	return "true"
 }
 
-func getBillingAccount(bp config.Blueprint) string {
+func getBillingAccountId(bp config.Blueprint) string {
 	projectID := getProjectId(bp)
 	ctx := context.Background()
 	billingAccount, err := getProjectBillingAccount(ctx, projectID)
@@ -417,11 +416,8 @@ func getBillingAccount(bp config.Blueprint) string {
 	} else if billingAccount == "" {
 		fmt.Printf("Project %s does not have an associated billing account.\n", projectID)
 	}
-	billingAccount = strings.TrimPrefix(billingAccount, "billingAccounts/")
-	// Hash the billing account ID to avoid PII.
-	billingAccountHash := sha256.Sum256([]byte(billingAccount))
-	return fmt.Sprintf("%x", billingAccountHash)[:24]
-	// return billingAccount
+	// Billing account ID is not PII.
+	return strings.TrimPrefix(billingAccount, "billingAccounts/")
 }
 
 // getIsGoogler returns "true" if the GCP project belongs to the Google.com organization.

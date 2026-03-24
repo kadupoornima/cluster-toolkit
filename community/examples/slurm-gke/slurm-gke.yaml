@@ -23,10 +23,10 @@ vars:
   # Toolkit Deployments.
   deployment_name: slurmgke
   # The GCP Region used for this deployment.
-  region: us-central1
+  region: us-east4
 
   # The GCP Zone used for this deployment.
-  zone: us-central1-b
+  zone: us-east4-a
 
   # Cidr block containing the IP of the machine calling terraform.
   # To allow all (IAM restrictions still enforced), use 0.0.0.0/0
