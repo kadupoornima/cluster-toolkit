@@ -25,6 +25,8 @@ import (
 
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/logging"
+	"os"
+	"path/filepath"
 	"regexp"
 	"runtime"
 	"slices"
@@ -80,7 +82,7 @@ func (c *Collector) CollectMetrics(errorCode int) {
 	c.metadata[TERRAFORM_VERSION] = getTerraformVersion()
 	c.metadata[BILLING_ACCOUNT_ID] = getBillingAccountId(c.blueprint)
 	c.metadata[DEPLOYED_FROM_SOURCE] = getDeployedFromSource()
-	c.metadata[DEPLOYED_FROM_BINARY] = getDeployedFromBinary()
+	c.metadata[DEPLOYED_FROM_BINARY] = getDeployedFromBinary(c.metadata[DEPLOYED_FROM_SOURCE] == "true")
 	c.metadata[IS_TEST_DATA] = getIsTestData()
 	c.metadata[EXIT_CODE] = strconv.Itoa(errorCode)
 }
@@ -408,12 +410,29 @@ func getTerraformVersion() string {
 	return version
 }
 
+// getDeployedFromSource returns "true" if the CLI is being run from inside a Git repository,
+// indicating the user likely cloned the code and built it locally.
 func getDeployedFromSource() string {
-	return "test"
+	exePath, err := os.Executable()
+	if err != nil {
+		return "false"
+	}
+	exeDir := filepath.Dir(exePath)
+	logging.Info("exeDir: %v", exeDir)
+	gitPath := filepath.Join(exeDir, ".git")
+	logging.Info("gitPath: %v", gitPath)
+
+	// Check if the .git folder exists in the same directory.
+	if _, err := os.Stat(gitPath); err == nil {
+		return "true"
+	}
+
+	return "false"
 }
 
-func getDeployedFromBinary() string {
-	return "test"
+// If not deployed from source, deployed from binary.
+func getDeployedFromBinary(deployedFromSource bool) string {
+	return fmt.Sprintf("%v", !deployedFromSource)
 }
 
 func getIsTestData() string {
