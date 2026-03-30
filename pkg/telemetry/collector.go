@@ -205,27 +205,22 @@ func getIsVmInstance(modulesList []string) string {
 }
 
 func getMachineType(bp config.Blueprint) string {
-	// logging.Info("\nBLUEPRINT:\n%v\n\n", bp)
 	machine_types := make([]string, 0)
 	modules := getModulesWithPattern(machineTypeModulePattern, bp)
-	// logging.Info("\nMODULES:\n%v\n", modules)
 
 	for _, m := range modules {
 		if m.Settings.Has("machine_type") {
-			// logging.Info("\nBBBBB: %v", m.Settings.Get("machine_type"))
 			machine_type := m.Settings.Get("machine_type")
 
 			// Evaluate the value to resolve expressions like $(vars.machine_type)
 			evaluated_type, err := bp.Eval(machine_type)
 
-			// logging.Info("evaluated_type: %v", evaluated_type)
 			// Some module outputs or references carry cty marks, so we unmark them safely before use.
 			if err == nil {
 				unmarked_type, _ := evaluated_type.Unmark()
 
 				if !unmarked_type.IsNull() && unmarked_type.Type() == cty.String {
 					machine_types = append(machine_types, unmarked_type.AsString())
-					logging.Info("\n\nXXXX: %v\n\n", unmarked_type.AsString())
 				}
 			}
 		}
@@ -237,25 +232,31 @@ func getMachineType(bp config.Blueprint) string {
 				unmarked_node_type, _ := evaluated_node_type.Unmark()
 				if !unmarked_node_type.IsNull() && unmarked_node_type.Type() == cty.String {
 					machine_types = append(machine_types, unmarked_node_type.AsString())
-					logging.Info("\n\nXXXX: %v\n\n", unmarked_node_type.AsString())
 				}
 			}
 		}
 	}
-	// logging.Info("\n\nFINAL: %v\n\n", machine_types...)
 	return strings.Join(machine_types, ",")
 }
 
 func getRegion(bp config.Blueprint) string {
-	if bp.Vars.Has("region") {
-		return bp.Vars.Get("region").AsString()
+	val, err := bp.Eval(config.GlobalRef("region").AsValue())
+	if err == nil {
+		region, _ := val.Unmark()
+		if !region.IsNull() && region.Type() == cty.String {
+			return region.AsString()
+		}
 	}
 	return ""
 }
 
 func getZone(bp config.Blueprint) string {
-	if bp.Vars.Has("zone") {
-		return bp.Vars.Get("zone").AsString()
+	val, err := bp.Eval(config.GlobalRef("zone").AsValue())
+	if err == nil {
+		zone, _ := val.Unmark()
+		if !zone.IsNull() && zone.Type() == cty.String {
+			return zone.AsString()
+		}
 	}
 	return ""
 }

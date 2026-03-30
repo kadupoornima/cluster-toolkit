@@ -28,6 +28,7 @@ import (
 
 	billing "cloud.google.com/go/billing/apiv1"
 	"cloud.google.com/go/billing/apiv1/billingpb"
+	"github.com/zclconf/go-cty/cty"
 )
 
 func getBlueprint(args []string) config.Blueprint {
@@ -72,10 +73,13 @@ func getModulesList(bp config.Blueprint) []string {
 }
 
 func getProjectId(bp config.Blueprint) string {
-	logging.Info("Keys:\n%v", bp.Vars.Keys())
-	logging.Info("Items:\n%v", bp.Vars.Items())
-	if bp.Vars.Has("project_id") {
-		return bp.Vars.Get("project_id").AsString()
+	// config.GlobalRef("project_id").AsValue() creates a $(vars.project_id) expression to evaluate
+	val, err := bp.Eval(config.GlobalRef("project_id").AsValue())
+	if err == nil {
+		unmarked, _ := val.Unmark()
+		if !unmarked.IsNull() && unmarked.Type() == cty.String {
+			return unmarked.AsString()
+		}
 	}
 	return ""
 }
