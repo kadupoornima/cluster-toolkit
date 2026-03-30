@@ -36,6 +36,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"github.com/zclconf/go-cty/cty"
 )
 
 var (
@@ -56,6 +57,7 @@ func NewCollector(cmd *cobra.Command, args []string) *Collector {
 	}
 }
 
+// Main function for collecting Telemetry metrics.
 func (c *Collector) CollectMetrics(errorCode int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -76,12 +78,14 @@ func (c *Collector) CollectMetrics(errorCode int) {
 	c.metadata[OS_NAME] = getOSName()
 	c.metadata[OS_VERSION] = getOSVersion()
 	c.metadata[TERRAFORM_VERSION] = getTerraformVersion()
+	c.metadata[BILLING_ACCOUNT_ID] = getBillingAccountId(c.blueprint)
 	c.metadata[DEPLOYED_FROM_SOURCE] = getDeployedFromSource()
 	c.metadata[DEPLOYED_FROM_BINARY] = getDeployedFromBinary()
 	c.metadata[IS_TEST_DATA] = getIsTestData()
 	c.metadata[EXIT_CODE] = strconv.Itoa(errorCode)
 }
 
+// Method to collect Concord metrics and build event.
 func (c *Collector) BuildConcordEvent() ConcordEvent {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -123,12 +127,7 @@ func getProjectNumber(bp config.Blueprint) string {
 		logging.Error("Could not get project: %v", err)
 	}
 
-	// project.Name returns "projects/123456789012"
-	projectNumber := strings.TrimPrefix(project.Name, "projects/")
-
-	fmt.Printf("Project ID: %s\n", project.ProjectId)
-	fmt.Printf("Project Number: %s\n", projectNumber)
-	return projectNumber
+	return strings.TrimPrefix(project.Name, "projects/")
 }
 
 func getReleaseVersion() string {
@@ -206,32 +205,45 @@ func getIsVmInstance(modulesList []string) string {
 }
 
 func getMachineType(bp config.Blueprint) string {
-	machine_types := make([]any, 0)
+	// logging.Info("\nBLUEPRINT:\n%v\n\n", bp)
+	machine_types := make([]string, 0)
 	modules := getModulesWithPattern(machineTypeModulePattern, bp)
 	// logging.Info("\nMODULES:\n%v\n", modules)
 
 	for _, m := range modules {
 		if m.Settings.Has("machine_type") {
-			logging.Info("\nBBBBB: %v", m.Settings.Get("machine_type"))
+			// logging.Info("\nBBBBB: %v", m.Settings.Get("machine_type"))
 			machine_type := m.Settings.Get("machine_type")
-			logging.Info("machine_type.Type(): %v", machine_type.Type())
-			// logging.Info("BBBBB: %v\n", machine_type.AsValueMap())
 
-			if !machine_type.IsNull() {
-				machine_types = append(machine_types, machine_type)
+			// Evaluate the value to resolve expressions like $(vars.machine_type)
+			evaluated_type, err := bp.Eval(machine_type)
+
+			// logging.Info("evaluated_type: %v", evaluated_type)
+			// Some module outputs or references carry cty marks, so we unmark them safely before use.
+			if err == nil {
+				unmarked_type, _ := evaluated_type.Unmark()
+
+				if !unmarked_type.IsNull() && unmarked_type.Type() == cty.String {
+					machine_types = append(machine_types, unmarked_type.AsString())
+					logging.Info("\n\nXXXX: %v\n\n", unmarked_type.AsString())
+				}
 			}
 		}
-		// For the schedmd-slurm-gcp-v6-nodeset-tpu module
-		// if m.Settings.Has("node_type") {
-		// 	machine_type, _ := m.Settings.Get("node_type").UnmarkDeep()
-		// 	if !machine_type.IsNull() && machine_type.Type() == cty.String {
-		// 		machine_types = append(machine_types, machine_type.AsString())
-		// 	}
-		// }
+		// For schedmd-slurm-gcp-v6-nodeset-tpu module. It uses node_type setting instead of machine_type.
+		if m.Settings.Has("node_type") {
+			node_type := m.Settings.Get("node_type")
+			evaluated_node_type, err := bp.Eval(node_type)
+			if err == nil {
+				unmarked_node_type, _ := evaluated_node_type.Unmark()
+				if !unmarked_node_type.IsNull() && unmarked_node_type.Type() == cty.String {
+					machine_types = append(machine_types, unmarked_node_type.AsString())
+					logging.Info("\n\nXXXX: %v\n\n", unmarked_node_type.AsString())
+				}
+			}
+		}
 	}
-	logging.Info("FINAL:\n\n%v\n\n", machine_types...)
-	// return strings.Join(machine_types, ",")
-	return "test"
+	// logging.Info("\n\nFINAL: %v\n\n", machine_types...)
+	return strings.Join(machine_types, ",")
 }
 
 func getRegion(bp config.Blueprint) string {

@@ -53,7 +53,7 @@ func getModulesWithPattern(pattern string, bp config.Blueprint) []config.Module 
 		if matched {
 			// logging.Info("Source: %v", m.Source)
 			// logging.Info("Items: %v", m.Settings.Items())
-			// logging.Info("%v", m.Settings.Get("machine_type").GetAttr())
+			// logging.Info("m.Settings.Get(\"machine_type\"): %v", m.Settings.Get("machine_type"))
 			// logging.Info("Keys: %v", m.Settings.Keys())
 			modules = append(modules, m)
 		}
@@ -82,22 +82,18 @@ func getProjectId(bp config.Blueprint) string {
 
 // getProjectBillingAccount fetches the billing account associated with a given GCP project in the format "billingAccounts/{billing_account_id}". If billing is disabled for the project, this will return an empty string.
 func getProjectBillingAccount(ctx context.Context, projectID string) (string, error) {
-	logging.Info("1-HIIII")
 	client, err := billing.NewCloudBillingClient(ctx)
 	if err != nil {
 		return "", fmt.Errorf("failed to create billing client: %w", err)
 	}
 	defer client.Close()
-	logging.Info("2-HIIII")
 	req := &billingpb.GetProjectBillingInfoRequest{
 		Name: fmt.Sprintf("projects/%s", projectID),
 	}
-	logging.Info("3-HIIII\n%v", req)
 	info, err := client.GetProjectBillingInfo(ctx, req)
 	if err != nil {
 		return "", fmt.Errorf("failed to get billing info for project %s: %w", projectID, err)
 	}
-	logging.Info("4-HIIII")
 	return info.GetBillingAccountName(), nil
 }
 

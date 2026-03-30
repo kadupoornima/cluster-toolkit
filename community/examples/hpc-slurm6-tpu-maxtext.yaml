@@ -17,7 +17,7 @@
 blueprint_name: slurm6-tpu-v4
 
 vars:
-  project_id: ## Set GCP Project ID Here ##
+  project_id: hpc-toolkit-dev
   deployment_name: slurm6-tpu-v4
   region: us-central2
   zone: us-central2-b
