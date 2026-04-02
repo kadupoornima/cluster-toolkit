@@ -85,10 +85,10 @@ func getProjectId(bp config.Blueprint) string {
 }
 
 // getProjectBillingAccount fetches the billing account associated with a given GCP project in the format "billingAccounts/{billing_account_id}". If billing is disabled for the project, this will return an empty string.
-func getProjectBillingAccount(ctx context.Context, projectID string) (string, error) {
+func getProjectBillingAccount(ctx context.Context, projectID string) string {
 	client, err := billing.NewCloudBillingClient(ctx)
 	if err != nil {
-		return "", fmt.Errorf("failed to create billing client: %w", err)
+		return ""
 	}
 	defer client.Close()
 	req := &billingpb.GetProjectBillingInfoRequest{
@@ -96,9 +96,34 @@ func getProjectBillingAccount(ctx context.Context, projectID string) (string, er
 	}
 	info, err := client.GetProjectBillingInfo(ctx, req)
 	if err != nil {
-		return "", fmt.Errorf("failed to get billing info for project %s: %w", projectID, err)
+		return ""
 	}
-	return info.GetBillingAccountName(), nil
+	return info.GetBillingAccountName()
+}
+
+// isGoogleCloudAccount checks if the active gcloud account is a @google.com email.
+func isGoogleCloudAccount() bool {
+	cmd := exec.Command("gcloud", "config", "get-value", "account")
+	out, err := cmd.Output()
+	if err != nil {
+		logging.Info("Failed to get gcloud account: %v", err)
+		return false
+	}
+
+	email := strings.TrimSpace(string(out))
+	return strings.HasSuffix(email, "@google.com")
+}
+
+// hasInternalBinaries checks for the presence of internal developer binaries.
+func hasInternalBinaries() bool {
+	if _, err := exec.LookPath("gcert"); err == nil {
+		return true
+	}
+	if _, err := exec.LookPath("prodaccess"); err == nil {
+		return true
+	}
+
+	return false
 }
 
 // getLinuxVersion parses /etc/os-release to find the pretty name or version ID.

@@ -34,8 +34,6 @@ import (
 	"strings"
 	"time"
 
-	crm "google.golang.org/api/cloudresourcemanager/v1"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"github.com/zclconf/go-cty/cty"
@@ -101,7 +99,7 @@ func (c *Collector) BuildConcordEvent() ConcordEvent {
 		ProjectNumber:    getProjectNumber(c.blueprint),
 		ClientInstallId:  getClientInstallId(),
 		BillingAccountId: getBillingAccountId(c.blueprint),
-		IsGoogler:        getIsGoogler(c.blueprint),
+		IsGoogler:        getIsGoogler(),
 		ReleaseVersion:   getReleaseVersion(),
 	}
 }
@@ -119,17 +117,17 @@ func getProjectNumber(bp config.Blueprint) string {
 	client, _ := resourcemanager.NewProjectsClient(ctx)
 	defer client.Close()
 
-	// The Name field in the request can be the Project ID
 	req := &resourcemanagerpb.GetProjectRequest{
 		Name: fmt.Sprintf("projects/%s", projectID),
 	}
 
 	project, err := client.GetProject(ctx, req)
-	if err != nil {
-		logging.Error("Could not get project: %v", err)
-	}
 
-	return strings.TrimPrefix(project.Name, "projects/")
+	if err != nil || project == nil || project.Name == "" {
+		return ""
+	} else {
+		return strings.TrimPrefix(project.Name, "projects/")
+	}
 }
 
 func getReleaseVersion() string {
@@ -137,7 +135,13 @@ func getReleaseVersion() string {
 }
 
 func getCommandName(cmd *cobra.Command) string {
-	return cmd.Name()
+	path := cmd.CommandPath() // Returns the full command path (e.g., "gcluster job cancel")
+
+	if path == "" {
+		return path
+	} else {
+		return strings.TrimPrefix(path, "gcluster ")
+	}
 }
 
 func getCmdFlags(cmd *cobra.Command) string {
@@ -418,9 +422,7 @@ func getDeployedFromSource() string {
 		return "false"
 	}
 	exeDir := filepath.Dir(exePath)
-	logging.Info("exeDir: %v", exeDir)
 	gitPath := filepath.Join(exeDir, ".git")
-	logging.Info("gitPath: %v", gitPath)
 
 	// Check if the .git folder exists in the same directory.
 	if _, err := os.Stat(gitPath); err == nil {
@@ -435,54 +437,32 @@ func getDeployedFromBinary(deployedFromSource bool) string {
 	return fmt.Sprintf("%v", !deployedFromSource)
 }
 
+// This method intentionally returns "true", as all current telemetry is in testing phase.
 func getIsTestData() string {
-	return "true"
+	return "true" // do not modify
 }
 
 func getBillingAccountId(bp config.Blueprint) string {
 	projectID := getProjectId(bp)
-	ctx := context.Background()
-	billingAccount, err := getProjectBillingAccount(ctx, projectID)
-	if err != nil {
-		fmt.Printf("Warning: Could not fetch billing account: %v\n", err)
-	} else if billingAccount == "" {
-		fmt.Printf("Project %s does not have an associated billing account.\n", projectID)
+	if projectID == "" {
+		return ""
 	}
-	// Billing account ID is not PII.
-	return strings.TrimPrefix(billingAccount, "billingAccounts/")
+
+	ctx := context.Background()
+	billingAccount := getProjectBillingAccount(ctx, projectID)
+	if billingAccount == "" {
+		return ""
+	} else {
+		return strings.TrimPrefix(billingAccount, "billingAccounts/")
+	}
 }
 
-// getIsGoogler returns "true" if the GCP project belongs to the Google.com organization.
-func getIsGoogler(bp config.Blueprint) bool {
-	// googleOrgID is the canonical Google.com organization ID
-	googleOrgID := "433637338589"
-
-	projectID := getProjectId(bp)
-	if projectID == "" {
-		return false
+// getIsGoogler identifies if the CLI is being run by an internal Google user.
+func getIsGoogler() bool {
+	if isGoogleCloudAccount() {
+		return true
 	}
-	ctx := context.Background()
-	service, err := crm.NewService(ctx)
-	if err != nil {
-		return false
-	}
-
-	// Fetch the ancestry of the project
-	req := &crm.GetAncestryRequest{}
-	resp, err := service.Projects.GetAncestry(projectID, req).Do()
-	if err != nil {
-		// This can fail if the user lacks IAM permissions or the project doesn't exist
-		return false
-	}
-
-	// Traverse the ancestors from bottom (the project) to top (the organization)
-	for _, ancestor := range resp.Ancestor {
-		if ancestor.ResourceId.Type == "organization" && ancestor.ResourceId.Id == googleOrgID {
-			return true
-		}
-	}
-
-	return false
+	return hasInternalBinaries()
 }
 
 func getLatencyMs(eventStartTime time.Time) int64 {

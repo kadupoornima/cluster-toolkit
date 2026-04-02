@@ -28,6 +28,7 @@ while (<>){
     pkg/inspect 60
     pkg/modulewriter 79
     pkg/telemetry 0
+    pkg/http_dummy 0
     pkg 80
   );
 
