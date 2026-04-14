@@ -15,7 +15,7 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: default
+  name: ccc-workloads
   annotations:
     # GKE will automatically inject the nodeSelector for this class into all pods
     cloud.google.com/default-compute-class: my-custom-compute-class
