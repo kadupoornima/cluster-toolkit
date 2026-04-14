@@ -20,26 +20,28 @@ spec:
   nodePoolAutoCreation:
     enabled: true
   priorities:
-  # Priority 1: TPU in a specific zone (On-Demand)
-  - tpu:
-      type: tpu-v5p-slice
-      count: 4
-      topology: 4x4x4
-    location:
-      zones:
-      - "us-central1-a"
+  # # Priority 1: TPU in a specific zone (On-Demand)
+  # - tpu:
+  #     type: tpu-v5p-slice
+  #     count: 4
+  #     topology: 4x4x4
+  #   location:
+  #     zones:
+  #     - "us-central1-a"
 
-  # Priority 2: GPU in a specific Standard zone (On-Demand)
-  - gpu:
-      type: nvidia-tesla-a100
-      count: 1
-    location:
-      zones:
-      - "us-central1-a"
-      - "us-central1-b"
+  # # Priority 2: GPU in a specific Standard zone (On-Demand)
+  # - gpu:
+  #     type: nvidia-tesla-a100
+  #     count: 1
+  #   location:
+  #     zones:
+  #     - "us-central1-a"
+  #     - "us-central1-b"
 
   # Priority 3: n4 machine family (Spot)
   - machineFamily: n4
     spot: true
+  - machineType: c3-standard-8-lssd
+    spot: false
 
   whenUnsatisfiable: DoNotScaleUp

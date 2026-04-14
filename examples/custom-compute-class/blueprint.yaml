@@ -100,7 +100,8 @@ deployment_groups:
 
   - id: deploy-ccc-manifest
     source: modules/management/kubectl-apply
-    use: [my-cluster]
+    use: [n4-cluster]
     settings:
       apply_manifests:
       - source: $(vars.ccc_manifest_path)
+      - source: $(ghpc_stage("./namespace.yaml"))
