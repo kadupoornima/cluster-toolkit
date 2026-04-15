@@ -33,7 +33,6 @@ import (
 const (
 	USER_ID_KEY    string = "user_id"
 	TELEMETRY_KEY  string = "telemetry_enabled"
-	etcdEndpoint   string = "http://etcd-cluster:2379"
 	projectID      string = "hpc-toolkit-gsc"
 	collectionName string = "user_configs"
 )
@@ -69,25 +68,22 @@ func InitUserConfig() error {
 
 // GetPersistentUserId returns the stored User ID from Viper config.
 func GetPersistentUserId() string {
-	_ = viper.ReadRemoteConfig()
 	return viper.GetString(USER_ID_KEY)
-
 }
 
 // IsTelemetryEnabled returns the stored config setting for whether Telemetry data should be collected or not.
 func IsTelemetryEnabled() bool {
-	_ = viper.ReadRemoteConfig()
 	return viper.GetBool(TELEMETRY_KEY)
 }
 
 // SetTelemetry sets the telemetry preference for the user.
-func SetTelemetry(telemetry bool) {
-	_ = viper.ReadRemoteConfig()
+func SetTelemetry(telemetry bool) error {
 	viper.Set(TELEMETRY_KEY, telemetry)
 	err := SaveToFirestore()
 	if err != nil {
-		logging.Error("Failed to save state to Firestore: %v", err)
+		return fmt.Errorf("Failed to save state to Firestore: %v", err)
 	}
+	return nil
 }
 
 // generateUniqueID creates a stable hash based on the machine and user

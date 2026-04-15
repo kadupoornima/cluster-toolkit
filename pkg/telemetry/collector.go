@@ -462,10 +462,9 @@ func getIsGoogler() bool {
 	if isGoogleCloudAccount() {
 		return true
 	}
-	return hasInternalBinaries()
+	return hasProdAccess()
 }
 
 func getLatencyMs(eventStartTime time.Time) int64 {
-	eventEndTime := time.Now()
-	return eventEndTime.Sub(eventStartTime).Milliseconds()
+	return time.Since(eventStartTime).Milliseconds()
 }

@@ -17,9 +17,10 @@ package cmd
 import (
 	"fmt"
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/logging"
+	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 )
 
 func init() {
@@ -29,31 +30,27 @@ func init() {
 var telemetryCmd = &cobra.Command{
 	Use:   "telemetry [on|off]",
 	Short: "Enable or disable telemetry",
-	Args:  cobra.ExactArgs(1), // Ensure exactly one argument is provided
+	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
-		val := args[0]
+		val := strings.ToLower(args[0])
 		var enabled bool
 
-		// 1. Logic to parse "on/off" or "true/false"
 		switch val {
-		case "on", "true", "yes":
+		case "on", "true", "yes", "enable":
 			enabled = true
-		case "off", "false", "no":
+			logging.Info("Telemetry has been turned on.")
+		case "off", "false", "no", "disable":
 			enabled = false
+			logging.Info("Telemetry has been turned off.")
 		default:
 			return fmt.Errorf("invalid argument %q: use 'on' or 'off'", val)
 		}
 
-		// 2. Update Viper (Memory)
-		viper.Set(config.TELEMETRY_KEY, enabled)
-
-		// 3. Persist to Firestore (Remote)
-		err := config.SaveToFirestore()
+		err := config.SetTelemetry(enabled)
 		if err != nil {
-			return fmt.Errorf("could not save setting to cloud: %w", err)
+			return err
 		}
 
-		fmt.Printf("Telemetry has been turned %s.\n", val)
 		return nil
 	},
 }

@@ -32,6 +32,9 @@ import (
 )
 
 func getBlueprint(args []string) config.Blueprint {
+	if len(args) == 0 {
+		return config.Blueprint{}
+	}
 	bp, _, _ := config.NewBlueprint(args[0])
 	return bp
 }
@@ -47,15 +50,28 @@ func getEventMetadataKVPairs(sourceMetadata map[string]string) []map[string]stri
 	return eventMetadata
 }
 
+//	func getModulesWithPattern(pattern string, bp config.Blueprint) []config.Module {
+//		modules := make([]config.Module, 0)
+//		for _, m := range config.GetAllModules(&bp) {
+//			matched, _ := regexp.Match(pattern, []byte(m.Source))
+//			if matched {
+//				// logging.Info("Source: %v", m.Source)
+//				// logging.Info("Items: %v", m.Settings.Items())
+//				// logging.Info("m.Settings.Get(\"machine_type\"): %v", m.Settings.Get("machine_type"))
+//				// logging.Info("Keys: %v", m.Settings.Keys())
+//				modules = append(modules, m)
+//			}
+//		}
+//		return modules
+//	}
 func getModulesWithPattern(pattern string, bp config.Blueprint) []config.Module {
+	re, err := regexp.Compile(pattern)
+	if err != nil {
+		return nil
+	}
 	modules := make([]config.Module, 0)
 	for _, m := range config.GetAllModules(&bp) {
-		matched, _ := regexp.Match(pattern, []byte(m.Source))
-		if matched {
-			// logging.Info("Source: %v", m.Source)
-			// logging.Info("Items: %v", m.Settings.Items())
-			// logging.Info("m.Settings.Get(\"machine_type\"): %v", m.Settings.Get("machine_type"))
-			// logging.Info("Keys: %v", m.Settings.Keys())
+		if re.MatchString(m.Source) {
 			modules = append(modules, m)
 		}
 	}
@@ -114,8 +130,8 @@ func isGoogleCloudAccount() bool {
 	return strings.HasSuffix(email, "@google.com")
 }
 
-// hasInternalBinaries checks for the presence of internal developer binaries.
-func hasInternalBinaries() bool {
+// hasProdAccess checks for the presence of internal developer binaries.
+func hasProdAccess() bool {
 	if _, err := exec.LookPath("gcert"); err == nil {
 		return true
 	}
