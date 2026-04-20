@@ -95,7 +95,7 @@ func ifModulesMatchPatterns(modulesList []string, patterns []string) string {
 	return strconv.FormatBool(matched)
 }
 
-func getModulesList(bp config.Blueprint) []string {
+func getBpModulesList(bp config.Blueprint) []string {
 	moduleInfos := make([]config.Module, 0)
 	modules := make([]string, 0)
 	moduleInfos = append(moduleInfos, config.GetAllBpModules(&bp)...)

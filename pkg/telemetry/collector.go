@@ -62,7 +62,7 @@ func (c *Collector) CollectMetrics(errorCode int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	bpModulesList := getModulesList(c.blueprint)
+	bpModulesList := getBpModulesList(c.blueprint)
 
 	c.metadata[COMMAND_FLAGS] = getCmdFlags(c.eventCmd)
 	c.metadata[BLUEPRINT] = getBlueprintName(c.blueprint)
@@ -353,7 +353,7 @@ func getProvisioningMode() string {
 
 func getModules(modulesList []string) string {
 	sanitizedModules := make([]string, 0)
-	standardModules, _ := config.GetAllDefinedModules()
+	standardModules, _ := config.GetPredefinedModules()
 	for _, m := range modulesList {
 		if slices.Contains(standardModules, m) {
 			sanitizedModules = append(sanitizedModules, m)

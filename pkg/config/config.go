@@ -17,16 +17,17 @@ package config
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
-	"path"
-
-	"hpc-toolkit/pkg/sourcereader"
+	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/agext/levenshtein"
 	"github.com/hashicorp/hcl/v2"
@@ -35,6 +36,7 @@ import (
 	"golang.org/x/exp/maps"
 	"gopkg.in/yaml.v3"
 
+	"hpc-toolkit/pkg/logging"
 	"hpc-toolkit/pkg/modulereader"
 )
 
@@ -970,65 +972,59 @@ func GetAllBpModules(bp *Blueprint) []Module {
 	return modules
 }
 
-// GetAllDefinedModules dynamically finds all Terraform and Packer modules.
-// It uses sourcereader.ModuleFS, supporting both source and binary installations.
-func GetAllDefinedModules() ([]string, error) {
-	var modules []string
+// TreeResponse represents the expected JSON structure from the GitHub Git Trees API
+type TreeResponse struct {
+	Tree []struct {
+		Path string `json:"path"`
+		Type string `json:"type"`
+	} `json:"tree"`
+}
 
-	// Ensure the embedded filesystem is initialized
-	if sourcereader.ModuleFS == nil {
-		return nil, fmt.Errorf("embedded file system is not initialized")
+// GetPredefinedModules fetches all pre-defined modules for the current toolkit version directly from the GitHub repository. This ensures that even if local files are deleted or custom modules are added, the returned list strictly reflects the official release of the user's toolkit version.
+func GetPredefinedModules() ([]string, error) {
+	// Retrieve the toolkit's embedded version (e.g., "v1.88.0" or "v1.71.0")
+	version := GetToolkitVersion()
+
+	// Query the GitHub API for the recursive file tree of this specific version tag
+	url := fmt.Sprintf("https://api.github.com/repos/GoogleCloudPlatform/cluster-toolkit/git/trees/%s?recursive=1", version)
+	client := &http.Client{
+		Timeout: 10 * time.Second,
 	}
 
-	// Define the base paths where modules are known to be located
-	baseDirs := []string{"modules", "community/modules"}
+	resp, err := client.Get(url)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch from GitHub API: %v", err)
+	}
+	defer resp.Body.Close()
 
-	// Define a custom recursive walker for the embedded BaseFS
-	var walk func(dir string) error
-	walk = func(dir string) error {
-		// Read entries from the embedded file system
-		entries, err := sourcereader.ModuleFS.ReadDir(dir)
-		if err != nil {
-			// Skip directories that do not exist (e.g., missing community/modules)
-			return nil
-		}
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("GitHub API returned status: %s", resp.Status)
+	}
 
-		isModule := false
-		for _, entry := range entries {
-			if !entry.IsDir() {
-				ext := path.Ext(entry.Name())
-				// Presence of Terraform (.tf) or Packer (.pkr.hcl) files signify a module
-				if ext == ".tf" || ext == ".hcl" {
-					isModule = true
-					break
+	var treeResp TreeResponse
+	if err := json.NewDecoder(resp.Body).Decode(&treeResp); err != nil {
+		return nil, fmt.Errorf("failed to decode JSON response: %v", err)
+	}
+
+	var predefinedModules []string
+	moduleSet := make(map[string]bool)
+
+	// Parse the remote tree
+	for _, item := range treeResp.Tree {
+		// We only care about files ("blob") inside the known module directories
+		if item.Type == "blob" {
+			if strings.HasPrefix(item.Path, "modules/") || strings.HasPrefix(item.Path, "community/modules/") {
+				// Identify module directories by Terraform or Packer configuration files
+				if strings.HasSuffix(item.Path, ".tf") || strings.HasSuffix(item.Path, ".pkr.hcl") {
+					moduleDir := path.Dir(item.Path)
+					if !moduleSet[moduleDir] {
+						moduleSet[moduleDir] = true
+						predefinedModules = append(predefinedModules, moduleDir)
+					}
 				}
 			}
 		}
-
-		if isModule {
-			// Module found, record it and stop recursing deeper to avoid nested resources
-			modules = append(modules, dir)
-			return nil
-		}
-
-		// Continue traversing subdirectories
-		for _, entry := range entries {
-			if entry.IsDir() {
-				subDir := path.Join(dir, entry.Name())
-				if err := walk(subDir); err != nil {
-					return err
-				}
-			}
-		}
-
-		return nil
 	}
-
-	for _, baseDir := range baseDirs {
-		if err := walk(baseDir); err != nil {
-			return nil, fmt.Errorf("error walking directory %s: %w", baseDir, err)
-		}
-	}
-
-	return modules, nil
+	logging.Info("predefinedModules:\n%v\n", predefinedModules)
+	return predefinedModules, nil
 }
