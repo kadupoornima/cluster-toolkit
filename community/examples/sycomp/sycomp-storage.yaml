@@ -17,10 +17,10 @@
 blueprint_name: sycomp-storage
 
 vars:
-  project_id: ""                     ## Set GCP Project ID Here
+  project_id: "hpc-toolkit-gsc"                     ## Set GCP Project ID Here
   deployment_name: "sycomp-storage"  ## Set customized deployment name
-  region: ""                         ## Set region
-  zone: ""                           ## Set zone
+  region: "us-central1"                         ## Set region
+  zone: "us-central1-b"                           ## Set zone
 
 # Documentation for each of the modules used below can be found at
 # https://github.com/GoogleCloudPlatform/hpc-toolkit/blob/main/modules/README.md

@@ -16,7 +16,9 @@ package telemetry
 
 import (
 	"bufio"
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"hpc-toolkit/pkg/config"
@@ -24,6 +26,8 @@ import (
 	"os"
 	"os/exec"
 	"regexp"
+	"slices"
+	"strconv"
 	"strings"
 
 	billing "cloud.google.com/go/billing/apiv1"
@@ -64,13 +68,14 @@ func getEventMetadataKVPairs(sourceMetadata map[string]string) []map[string]stri
 //		}
 //		return modules
 //	}
+
 func getModulesWithPattern(pattern string, bp config.Blueprint) []config.Module {
 	re, err := regexp.Compile(pattern)
 	if err != nil {
 		return nil
 	}
 	modules := make([]config.Module, 0)
-	for _, m := range config.GetAllModules(&bp) {
+	for _, m := range config.GetAllBpModules(&bp) {
 		if re.MatchString(m.Source) {
 			modules = append(modules, m)
 		}
@@ -78,10 +83,22 @@ func getModulesWithPattern(pattern string, bp config.Blueprint) []config.Module 
 	return modules
 }
 
+func ifModulesMatchPatterns(modulesList []string, patterns []string) string {
+	matched := false
+	matched = slices.ContainsFunc(modulesList, func(s string) bool {
+		for _, pattern := range patterns {
+			new, _ := regexp.MatchString(pattern, s)
+			matched = matched || new
+		}
+		return matched
+	})
+	return strconv.FormatBool(matched)
+}
+
 func getModulesList(bp config.Blueprint) []string {
 	moduleInfos := make([]config.Module, 0)
 	modules := make([]string, 0)
-	moduleInfos = append(moduleInfos, config.GetAllModules(&bp)...)
+	moduleInfos = append(moduleInfos, config.GetAllBpModules(&bp)...)
 	for _, module := range moduleInfos {
 		modules = append(modules, string(module.Source))
 	}
@@ -117,17 +134,77 @@ func getProjectBillingAccount(ctx context.Context, projectID string) string {
 	return info.GetBillingAccountName()
 }
 
-// isGoogleCloudAccount checks if the active gcloud account is a @google.com email.
-func isGoogleCloudAccount() bool {
-	cmd := exec.Command("gcloud", "config", "get-value", "account")
-	out, err := cmd.Output()
+// isInternalUser determines if the credentials belong to a Google internal user
+// or an internal CI service account.
+func isInternalUser() bool {
+	// 1. Check Application Default Credentials (ADC) for Service Accounts.
+	// CI pipelines usually inject credentials via this environment variable.
+	adcPath := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
+	if adcPath != "" {
+		isInternal, err := checkADCForInternalUser(adcPath)
+		if err == nil && isInternal {
+			return true
+		}
+	}
+
+	// 2. Fall back to checking the active gcloud authenticated account.
+	cmd := exec.Command("gcloud", "config", "get-value", "core/account")
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+
+	if err := cmd.Run(); err == nil {
+		email := strings.TrimSpace(stdout.String())
+		if isInternalEmail(email) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// checkADCForInternalUser parses the ADC JSON file to extract the client email.
+func checkADCForInternalUser(credentialsPath string) (bool, error) {
+	data, err := os.ReadFile(credentialsPath)
 	if err != nil {
-		logging.Info("Failed to get gcloud account: %v", err)
+		return false, err // Fail open (treat as external) if file can't be read
+	}
+
+	var key ServiceAccountKey
+	if err := json.Unmarshal(data, &key); err != nil {
+		return false, err
+	}
+
+	return isInternalEmail(key.ClientEmail), nil
+}
+
+// isInternalEmail contains the logic to identify Google emails and internal SA domains.
+func isInternalEmail(email string) bool {
+	if email == "" {
 		return false
 	}
 
-	email := strings.TrimSpace(string(out))
-	return strings.HasSuffix(email, "@google.com")
+	// Direct Google employees workstation accounts
+	if strings.HasSuffix(email, "@google.com") || strings.HasSuffix(email, ".google.com") {
+		return true
+	}
+
+	// Allowlist specific internal Cluster Toolkit project IDs that tests use.
+	internalProjects := []string{
+		"hpc-toolkit-dev",
+		"hpc-toolkit-demo",
+		"hpc-toolkit-gsc",
+	}
+
+	for _, project := range internalProjects {
+		pattern := ".*" + project + ".*gserviceaccount.com"
+		matched, err := regexp.MatchString(pattern, email)
+
+		if err == nil && matched {
+			return true
+		}
+	}
+
+	return false
 }
 
 // hasProdAccess checks for the presence of internal developer binaries.

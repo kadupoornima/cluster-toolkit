@@ -18,6 +18,9 @@ package config
 import (
 	"bytes"
 	"fmt"
+	"path"
+
+	"hpc-toolkit/pkg/sourcereader"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -958,11 +961,74 @@ func (bp *Blueprint) evalVars() (Dict, error) {
 	return NewDict(res), nil
 }
 
-// GetAllModules returns a slice of all modules defined in the blueprint.
-func GetAllModules(bp *Blueprint) []Module {
+// GetAllBpModules returns a slice of all modules defined in the blueprint.
+func GetAllBpModules(bp *Blueprint) []Module {
 	var modules []Module
 	bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
 		modules = append(modules, *m)
 	})
 	return modules
+}
+
+// GetAllDefinedModules dynamically finds all Terraform and Packer modules.
+// It uses sourcereader.ModuleFS, supporting both source and binary installations.
+func GetAllDefinedModules() ([]string, error) {
+	var modules []string
+
+	// Ensure the embedded filesystem is initialized
+	if sourcereader.ModuleFS == nil {
+		return nil, fmt.Errorf("embedded file system is not initialized")
+	}
+
+	// Define the base paths where modules are known to be located
+	baseDirs := []string{"modules", "community/modules"}
+
+	// Define a custom recursive walker for the embedded BaseFS
+	var walk func(dir string) error
+	walk = func(dir string) error {
+		// Read entries from the embedded file system
+		entries, err := sourcereader.ModuleFS.ReadDir(dir)
+		if err != nil {
+			// Skip directories that do not exist (e.g., missing community/modules)
+			return nil
+		}
+
+		isModule := false
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				ext := path.Ext(entry.Name())
+				// Presence of Terraform (.tf) or Packer (.pkr.hcl) files signify a module
+				if ext == ".tf" || ext == ".hcl" {
+					isModule = true
+					break
+				}
+			}
+		}
+
+		if isModule {
+			// Module found, record it and stop recursing deeper to avoid nested resources
+			modules = append(modules, dir)
+			return nil
+		}
+
+		// Continue traversing subdirectories
+		for _, entry := range entries {
+			if entry.IsDir() {
+				subDir := path.Join(dir, entry.Name())
+				if err := walk(subDir); err != nil {
+					return err
+				}
+			}
+		}
+
+		return nil
+	}
+
+	for _, baseDir := range baseDirs {
+		if err := walk(baseDir); err != nil {
+			return nil, fmt.Errorf("error walking directory %s: %w", baseDir, err)
+		}
+	}
+
+	return modules, nil
 }

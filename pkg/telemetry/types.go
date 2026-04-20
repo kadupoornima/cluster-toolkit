@@ -48,7 +48,6 @@ type Collector struct {
 	eventArgs      []string
 	eventStartTime time.Time
 	blueprint      config.Blueprint
-	modulesList    []string
 	metadata       map[string]string
 
 	mu sync.Mutex // Protects state against concurrent access
@@ -81,6 +80,11 @@ type ConcordEvent struct {
 
 type ClientInfo struct {
 	ClientType string `json:"client_type"`
+}
+
+// ServiceAccountKey matches the structure of a GCP service account JSON key.
+type ServiceAccountKey struct {
+	ClientEmail string `json:"client_email"`
 }
 
 const (

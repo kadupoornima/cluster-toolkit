@@ -17,6 +17,8 @@ package telemetry
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 
 	resourcemanager "cloud.google.com/go/resourcemanager/apiv3"
 	resourcemanagerpb "cloud.google.com/go/resourcemanager/apiv3/resourcemanagerpb"
@@ -27,11 +29,8 @@ import (
 	"hpc-toolkit/pkg/logging"
 	"os"
 	"path/filepath"
-	"regexp"
 	"runtime"
-	"slices"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -43,7 +42,8 @@ var (
 	isGkeModulePatterns        = []string{".*gke-node-pool.*", ".*gke-cluster.*"}
 	isSlurmModulePatterns      = []string{".*schedmd-slurm-gcp-.*"}
 	IsVmInstanceModulePatterns = []string{".*vm-instance.*"}
-	machineTypeModulePattern   = ".*modules.compute.*"
+
+	machineTypeModulePattern = ".*modules.compute.*"
 )
 
 // NewCollector creates and initializes a new Telemetry Collector.
@@ -62,19 +62,19 @@ func (c *Collector) CollectMetrics(errorCode int) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	c.modulesList = getModulesList(c.blueprint)
+	bpModulesList := getModulesList(c.blueprint)
 
 	c.metadata[COMMAND_FLAGS] = getCmdFlags(c.eventCmd)
 	c.metadata[BLUEPRINT] = getBlueprintName(c.blueprint)
 	c.metadata[DEPLOYMENT_FILE] = getDeploymentFile(c.eventCmd)
-	c.metadata[IS_GKE] = getIsGke(c.modulesList)
-	c.metadata[IS_SLURM] = getIsSlurm(c.modulesList)
-	c.metadata[IS_VM_INSTANCE] = getIsVmInstance(c.modulesList)
+	c.metadata[IS_GKE] = getIsGke(bpModulesList)
+	c.metadata[IS_SLURM] = getIsSlurm(bpModulesList)
+	c.metadata[IS_VM_INSTANCE] = getIsVmInstance(bpModulesList)
 	c.metadata[MACHINE_TYPE] = getMachineType(c.blueprint)
 	c.metadata[REGION] = getRegion(c.blueprint)
 	c.metadata[ZONE] = getZone(c.blueprint)
 	c.metadata[PROVISIONING_MODE] = getProvisioningMode()
-	c.metadata[MODULES] = getModules(c.modulesList)
+	c.metadata[MODULES] = getModules(bpModulesList)
 	c.metadata[OS_NAME] = getOSName()
 	c.metadata[OS_VERSION] = getOSVersion()
 	c.metadata[TERRAFORM_VERSION] = getTerraformVersion()
@@ -95,12 +95,12 @@ func (c *Collector) BuildConcordEvent() ConcordEvent {
 		EventType:        "gclusterCLI",
 		EventName:        getCommandName(c.eventCmd),
 		EventMetadata:    getEventMetadataKVPairs(c.metadata),
-		LatencyMs:        getLatencyMs(c.eventStartTime),
 		ProjectNumber:    getProjectNumber(c.blueprint),
 		ClientInstallId:  getClientInstallId(),
 		BillingAccountId: getBillingAccountId(c.blueprint),
 		IsGoogler:        getIsGoogler(),
 		ReleaseVersion:   getReleaseVersion(),
+		LatencyMs:        getLatencyMs(c.eventStartTime),
 	}
 }
 
@@ -175,74 +175,47 @@ func getDeploymentFile(cmd *cobra.Command) string {
 }
 
 func getIsGke(modulesList []string) string {
-	isGke := false
-	isGke = slices.ContainsFunc(modulesList, func(s string) bool {
-		for _, pattern := range isGkeModulePatterns {
-			match, _ := regexp.MatchString(pattern, s)
-			isGke = isGke || match
-		}
-		return isGke
-	})
-	return strconv.FormatBool(isGke)
+	return ifModulesMatchPatterns(modulesList, isGkeModulePatterns)
 }
 
 func getIsSlurm(modulesList []string) string {
-	isSlurm := false
-	isSlurm = slices.ContainsFunc(modulesList, func(s string) bool {
-		for _, pattern := range isSlurmModulePatterns {
-			match, _ := regexp.MatchString(pattern, s)
-			isSlurm = isSlurm || match
-		}
-		return isSlurm
-	})
-	return strconv.FormatBool(isSlurm)
+	return ifModulesMatchPatterns(modulesList, isSlurmModulePatterns)
 }
 
 func getIsVmInstance(modulesList []string) string {
-	isSlurm := false
-	isSlurm = slices.ContainsFunc(modulesList, func(s string) bool {
-		for _, pattern := range IsVmInstanceModulePatterns {
-			match, _ := regexp.MatchString(pattern, s)
-			isSlurm = isSlurm || match
-		}
-		return isSlurm
-	})
-	return strconv.FormatBool(isSlurm)
+	return ifModulesMatchPatterns(modulesList, IsVmInstanceModulePatterns)
 }
 
 func getMachineType(bp config.Blueprint) string {
-	machine_types := make([]string, 0)
+	var machineTypes []string
+	seen := make(map[string]bool) // To keep track of added machine types to avoid duplication
 	modules := getModulesWithPattern(machineTypeModulePattern, bp)
 
-	for _, m := range modules {
-		if m.Settings.Has("machine_type") {
-			machine_type := m.Settings.Get("machine_type")
-
-			// Evaluate the value to resolve expressions like $(vars.machine_type)
-			evaluated_type, err := bp.Eval(machine_type)
-
-			// Some module outputs or references carry cty marks, so we unmark them safely before use.
-			if err == nil {
-				unmarked_type, _ := evaluated_type.Unmark()
-
-				if !unmarked_type.IsNull() && unmarked_type.Type() == cty.String {
-					machine_types = append(machine_types, unmarked_type.AsString())
-				}
+	evalAndAdd := func(key string, m config.Module) {
+		if m.Settings.Has(key) {
+			keyValue := m.Settings.Get(key)
+			// Evaluate the value to resolve expressions like $(vars.key)
+			evaluatedKey, err := bp.Eval(keyValue)
+			if err != nil {
+				return
 			}
-		}
-		// For schedmd-slurm-gcp-v6-nodeset-tpu module. It uses node_type setting instead of machine_type.
-		if m.Settings.Has("node_type") {
-			node_type := m.Settings.Get("node_type")
-			evaluated_node_type, err := bp.Eval(node_type)
-			if err == nil {
-				unmarked_node_type, _ := evaluated_node_type.Unmark()
-				if !unmarked_node_type.IsNull() && unmarked_node_type.Type() == cty.String {
-					machine_types = append(machine_types, unmarked_node_type.AsString())
+			// Some module outputs or references carry cty marks, so we unmark them safely before use.
+			unmarkedKey, _ := evaluatedKey.Unmark()
+			if !unmarkedKey.IsNull() && unmarkedKey.Type() == cty.String {
+				mType := unmarkedKey.AsString()
+				if !seen[mType] {
+					machineTypes = append(machineTypes, mType)
+					seen[mType] = true
 				}
 			}
 		}
 	}
-	return strings.Join(machine_types, ",")
+
+	for _, m := range modules {
+		evalAndAdd("machine_type", m)
+		evalAndAdd("node_type", m) // For schedmd-slurm-gcp-v6-nodeset-tpu module. It uses node_type setting instead of machine_type.
+	}
+	return strings.Join(machineTypes, ",")
 }
 
 func getRegion(bp config.Blueprint) string {
@@ -374,8 +347,21 @@ func getProvisioningMode() string {
 // 	return strings.Join(modes, ",")
 // }
 
+// func getModules(modulesList []string) string {
+// 	return strings.Join(modulesList, ",")
+// }
+
 func getModules(modulesList []string) string {
-	return strings.Join(modulesList, ",")
+	sanitizedModules := make([]string, 0)
+	standardModules, _ := config.GetAllDefinedModules()
+	for _, m := range modulesList {
+		if slices.Contains(standardModules, m) {
+			sanitizedModules = append(sanitizedModules, m)
+		} else {
+			sanitizedModules = append(sanitizedModules, "Custom module")
+		}
+	}
+	return strings.Join(sanitizedModules, ",")
 }
 
 // func logModule(module config.Module) {
@@ -409,7 +395,7 @@ func getOSVersion() string {
 func getTerraformVersion() string {
 	version, err := shell.TfVersion()
 	if err != nil {
-		logging.Error("Unable to get Terraform version, %v", err)
+		return "Unknown"
 	}
 	return version
 }
@@ -459,10 +445,7 @@ func getBillingAccountId(bp config.Blueprint) string {
 
 // getIsGoogler identifies if the CLI is being run by an internal Google user.
 func getIsGoogler() bool {
-	if isGoogleCloudAccount() {
-		return true
-	}
-	return hasProdAccess()
+	return isInternalUser() || hasProdAccess()
 }
 
 func getLatencyMs(eventStartTime time.Time) int64 {
