@@ -207,18 +207,6 @@ func isInternalEmail(email string) bool {
 	return false
 }
 
-// hasProdAccess checks for the presence of internal developer binaries.
-func hasProdAccess() bool {
-	if _, err := exec.LookPath("gcert"); err == nil {
-		return true
-	}
-	if _, err := exec.LookPath("prodaccess"); err == nil {
-		return true
-	}
-
-	return false
-}
-
 // getLinuxVersion parses /etc/os-release to find the pretty name or version ID.
 func getLinuxVersion() string {
 	// Standard way to identify Linux distribution version

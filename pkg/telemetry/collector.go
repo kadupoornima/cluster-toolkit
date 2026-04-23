@@ -26,7 +26,6 @@ import (
 	"hpc-toolkit/pkg/shell"
 
 	"hpc-toolkit/pkg/config"
-	"hpc-toolkit/pkg/logging"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -39,11 +38,14 @@ import (
 )
 
 var (
-	isGkeModulePatterns        = []string{".*gke-node-pool.*", ".*gke-cluster.*"}
-	isSlurmModulePatterns      = []string{".*schedmd-slurm-gcp-.*"}
-	IsVmInstanceModulePatterns = []string{".*vm-instance.*"}
+	fetchStandardModules         = config.GetPredefinedModules
+	fetchStandardDeploymentFiles = config.GetPredefinedExampleFiles
 
-	machineTypeModulePattern = ".*modules.compute.*"
+	machineTypeModulePattern = "modules.compute" // pattern for compute modules that set the machine.
+
+	isGkeModulePatterns        = []string{"gke-node-pool", "gke-cluster"}
+	isSlurmModulePatterns      = []string{"schedmd-slurm-gcp-"}
+	isVmInstanceModulePatterns = []string{"vm-instance"}
 )
 
 // NewCollector creates and initializes a new Telemetry Collector.
@@ -161,15 +163,13 @@ func getDeploymentFile(cmd *cobra.Command) string {
 	if flag := cmd.Flag("deployment-file"); flag != nil && flag.Value.String() != "" {
 		path = flag.Value.String()
 	}
-	// else if len(args) > 0 {
-	// 	// 2. For standard commands (create, deploy, destroy), the blueprint or
-	// 	// deployment directory is usually the first positional argument
-	// 	path = args[0]
-	// }
-	logging.Info("\n\n\n path: %v\n\n\n", path)
+	path = strings.TrimPrefix(path, "./")
+
 	if path != "" {
-		// return filepath.Base(path)
-		return path
+		// Lazily load the predefined files here
+		if slices.Contains(fetchStandardDeploymentFiles(), path) {
+			return path
+		}
 	}
 	return ""
 }
@@ -183,7 +183,7 @@ func getIsSlurm(modulesList []string) string {
 }
 
 func getIsVmInstance(modulesList []string) string {
-	return ifModulesMatchPatterns(modulesList, IsVmInstanceModulePatterns)
+	return ifModulesMatchPatterns(modulesList, isVmInstanceModulePatterns)
 }
 
 func getMachineType(bp config.Blueprint) string {
@@ -351,16 +351,31 @@ func getProvisioningMode() string {
 // 	return strings.Join(modulesList, ",")
 // }
 
+// getModules returns a comma-separated string of sanitized module names.
+// It checks each module in the provided list against the officially predefined standardModules as per the user's version.
+// Standard modules are preserved, while any unrecognized module is replaced with "Custom" to protect user privacy and avoid exposing proprietary module paths.
 func getModules(modulesList []string) string {
-	sanitizedModules := make([]string, 0)
-	standardModules, _ := config.GetPredefinedModules()
+	// If the blueprint has no modules, return empty string
+	if len(modulesList) == 0 {
+		return ""
+	}
+
+	standardModules := fetchStandardModules()
+
+	// If standardModules is empty due to a network fetch failure, the telemetry payload will correctly report "UNVERIFIED", rather than falsely implying the blueprint had no modules.
+	if len(standardModules) == 0 {
+		return "UNVERIFIED"
+	}
+
+	sanitizedModules := make([]string, 0, len(modulesList))
 	for _, m := range modulesList {
 		if slices.Contains(standardModules, m) {
 			sanitizedModules = append(sanitizedModules, m)
 		} else {
-			sanitizedModules = append(sanitizedModules, "Custom module")
+			sanitizedModules = append(sanitizedModules, "Custom")
 		}
 	}
+
 	return strings.Join(sanitizedModules, ",")
 }
 
@@ -445,7 +460,7 @@ func getBillingAccountId(bp config.Blueprint) string {
 
 // getIsGoogler identifies if the CLI is being run by an internal Google user.
 func getIsGoogler() bool {
-	return isInternalUser() || hasProdAccess()
+	return isInternalUser()
 }
 
 func getLatencyMs(eventStartTime time.Time) int64 {

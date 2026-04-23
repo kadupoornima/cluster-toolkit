@@ -41,13 +41,9 @@ import (
 )
 
 const (
-	maxHintDist          int    = 3 // Maximum Levenshtein distance where we suggest a hint
-	latestToolkitVersion string = "v1.80.0"
+	maxHintDist          int = 3 // Maximum Levenshtein distance where we suggest a hint
+	latestToolkitVersion     = "v1.88.0"
 )
-
-func GetToolkitVersion() string {
-	return latestToolkitVersion
-}
 
 // map[moved module path]replacing module path
 var movedModules = map[string]string{
@@ -96,6 +92,10 @@ func (g *Group) Clone() Group {
 	return c
 }
 
+func GetToolkitVersion() string {
+	return latestToolkitVersion
+}
+
 // ModuleIndex returns the index of the input module in the group
 // return -1 if not found
 func (g Group) ModuleIndex(id ModuleID) int {
@@ -122,7 +122,7 @@ func (g Group) Kind() ModuleKind {
 	return k
 }
 
-// Module returns the module with the given ID
+// Module return the module with the given ID
 func (bp *Blueprint) Module(id ModuleID) (*Module, error) {
 	var mod *Module
 	bp.WalkModulesSafe(func(_ ModulePath, m *Module) {
@@ -305,6 +305,10 @@ type Blueprint struct {
 	// YamlCtx holds parsed YAML positions so validators can tell if a module setting
 	// was explicitly present in the user's source (runtime-only, not serialized).
 	YamlCtx *YamlCtx `yaml:"-"`
+	// AddCreatorLabel indicates whether to add the creator label
+	AddCreatorLabel bool `yaml:"-"`
+	// CreatorUsername is the username to use for the creator label
+	CreatorUsername string `yaml:"-"`
 }
 
 func (bp *Blueprint) Clone() Blueprint {
@@ -628,7 +632,7 @@ func (err InputValueError) Error() string {
 
 var matchLabelNameExp *regexp.Regexp = regexp.MustCompile(`^[\p{Ll}\p{Lo}][\p{Ll}\p{Lo}\p{N}_-]{0,62}$`)
 var matchLabelValueExp *regexp.Regexp = regexp.MustCompile(`^[\p{Ll}\p{Lo}\p{N}_-]{0,63}$`)
-var matchSlurmClusterNameExp *regexp.Regexp = regexp.MustCompile(`^[a-z](?:[a-z0-9]{0,9})$`)
+var matchSlurmClusterNameExp *regexp.Regexp = regexp.MustCompile(`^[a-z][-a-z0-9]{0,19}$`)
 
 // isValidLabelName checks if a string is a valid name for a GCP label.
 // For more information on valid label names, see the docs at:
@@ -980,13 +984,18 @@ type TreeResponse struct {
 	} `json:"tree"`
 }
 
-// GetPredefinedModules fetches all pre-defined modules for the current toolkit version directly from the GitHub repository. This ensures that even if local files are deleted or custom modules are added, the returned list strictly reflects the official release of the user's toolkit version.
-func GetPredefinedModules() ([]string, error) {
-	// Retrieve the toolkit's embedded version (e.g., "v1.88.0" or "v1.71.0")
-	version := GetToolkitVersion()
+// cachedTree stores the GitHub API response to avoid redundant network calls.
+var cachedTree *TreeResponse
 
-	// Query the GitHub API for the recursive file tree of this specific version tag
+// fetchGitFiles queries the GitHub API and decodes the JSON into a TreeResponse.
+func fetchGitFiles(version string) (*TreeResponse, error) {
+	// Return the cached response if we've already fetched it
+	if cachedTree != nil {
+		return cachedTree, nil
+	}
+
 	url := fmt.Sprintf("https://api.github.com/repos/GoogleCloudPlatform/cluster-toolkit/git/trees/%s?recursive=1", version)
+	// Ensure the network call has a timeout of up to 10 seconds to prevent blocking CLI execution.
 	client := &http.Client{
 		Timeout: 10 * time.Second,
 	}
@@ -1006,25 +1015,64 @@ func GetPredefinedModules() ([]string, error) {
 		return nil, fmt.Errorf("failed to decode JSON response: %v", err)
 	}
 
+	// Cache the response before returning it
+	cachedTree = &treeResp
+	return cachedTree, nil
+}
+
+// GetPredefinedModules fetches all pre-defined modules for the current toolkit version directly from the GitHub repository.
+// This ensures that even if local files are deleted or custom modules are added, the returned list strictly reflects the official release of the user's toolkit version.
+func GetPredefinedModules() []string {
 	var predefinedModules []string
 	moduleSet := make(map[string]bool)
+	version := GetToolkitVersion()
+	treeResp, err := fetchGitFiles(version)
 
-	// Parse the remote tree
-	for _, item := range treeResp.Tree {
-		// We only care about files ("blob") inside the known module directories
-		if item.Type == "blob" {
-			if strings.HasPrefix(item.Path, "modules/") || strings.HasPrefix(item.Path, "community/modules/") {
-				// Identify module directories by Terraform or Packer configuration files
-				if strings.HasSuffix(item.Path, ".tf") || strings.HasSuffix(item.Path, ".pkr.hcl") {
-					moduleDir := path.Dir(item.Path)
-					if !moduleSet[moduleDir] {
-						moduleSet[moduleDir] = true
-						predefinedModules = append(predefinedModules, moduleDir)
+	if err == nil {
+		// Parse the remote tree
+		for _, item := range treeResp.Tree {
+			// We only care about files ("blob") inside the known module directories
+			if item.Type == "blob" {
+				if strings.HasPrefix(item.Path, "modules/") || strings.HasPrefix(item.Path, "community/modules/") {
+					// Identify module directories by Terraform or Packer configuration files
+					if strings.HasSuffix(item.Path, ".tf") || strings.HasSuffix(item.Path, ".pkr.hcl") {
+						moduleDir := path.Dir(item.Path)
+						if !moduleSet[moduleDir] {
+							moduleSet[moduleDir] = true
+							predefinedModules = append(predefinedModules, moduleDir)
+						}
 					}
 				}
 			}
 		}
 	}
-	logging.Info("predefinedModules:\n%v\n", predefinedModules)
-	return predefinedModules, nil
+	return predefinedModules
+}
+
+// GetPredefinedExampleFiles fetches all pre-defined deployment files for the current toolkit version directly from the GitHub repository.
+// This ensures that even if local files are deleted or custom files are added, the returned list strictly reflects the official release of the user's toolkit version.
+func GetPredefinedExampleFiles() []string {
+	var predefinedFiles []string
+	fileSet := make(map[string]bool)
+	version := GetToolkitVersion()
+	treeResp, err := fetchGitFiles(version)
+
+	if err == nil {
+		// Parse the remote tree
+		for _, item := range treeResp.Tree {
+			// We only care about files ("blob") inside the known directories
+			if item.Type == "blob" {
+				if strings.HasPrefix(item.Path, "examples/") || strings.HasPrefix(item.Path, "community/examples/") {
+					if strings.HasSuffix(item.Path, ".yaml") {
+						if !fileSet[item.Path] {
+							fileSet[item.Path] = true
+							predefinedFiles = append(predefinedFiles, item.Path)
+						}
+					}
+				}
+			}
+		}
+	}
+	logging.Info("\ndeployment files:\n%v\n", predefinedFiles)
+	return predefinedFiles
 }
