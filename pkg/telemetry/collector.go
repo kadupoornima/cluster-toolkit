@@ -15,34 +15,26 @@
 package telemetry
 
 import (
+	"bytes"
 	"context"
-	"fmt"
-	"slices"
-	"strings"
-
-	resourcemanager "cloud.google.com/go/resourcemanager/apiv3"
-	resourcemanagerpb "cloud.google.com/go/resourcemanager/apiv3/resourcemanagerpb"
-
-	"hpc-toolkit/pkg/shell"
-
 	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/shell"
 	"os"
-	"path/filepath"
+	"os/exec"
 	"runtime"
+	"slices"
 	"strconv"
+	"strings"
 	"time"
+
+	"github.com/zclconf/go-cty/cty"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
-	"github.com/zclconf/go-cty/cty"
 )
 
 var (
-	fetchStandardModules         = config.GetPredefinedModules
-	fetchStandardDeploymentFiles = config.GetPredefinedExampleFiles
-
-	machineTypeModulePattern = "modules.compute" // pattern for compute modules that set the machine.
-
+	machineTypeModulePattern   = "modules.compute" // pattern for compute modules that set the machine.
 	isGkeModulePatterns        = []string{"gke-node-pool", "gke-cluster"}
 	isSlurmModulePatterns      = []string{"schedmd-slurm-gcp-"}
 	isVmInstanceModulePatterns = []string{"vm-instance"}
@@ -67,22 +59,17 @@ func (c *Collector) CollectMetrics(errorCode int) {
 	bpModulesList := getBpModulesList(c.blueprint)
 
 	c.metadata[COMMAND_FLAGS] = getCmdFlags(c.eventCmd)
-	c.metadata[BLUEPRINT] = getBlueprintName(c.blueprint)
-	c.metadata[DEPLOYMENT_FILE] = getDeploymentFile(c.eventCmd)
 	c.metadata[IS_GKE] = getIsGke(bpModulesList)
 	c.metadata[IS_SLURM] = getIsSlurm(bpModulesList)
 	c.metadata[IS_VM_INSTANCE] = getIsVmInstance(bpModulesList)
 	c.metadata[MACHINE_TYPE] = getMachineType(c.blueprint)
 	c.metadata[REGION] = getRegion(c.blueprint)
 	c.metadata[ZONE] = getZone(c.blueprint)
-	c.metadata[PROVISIONING_MODE] = getProvisioningMode()
 	c.metadata[MODULES] = getModules(bpModulesList)
 	c.metadata[OS_NAME] = getOSName()
 	c.metadata[OS_VERSION] = getOSVersion()
 	c.metadata[TERRAFORM_VERSION] = getTerraformVersion()
 	c.metadata[BILLING_ACCOUNT_ID] = getBillingAccountId(c.blueprint)
-	c.metadata[DEPLOYED_FROM_SOURCE] = getDeployedFromSource()
-	c.metadata[DEPLOYED_FROM_BINARY] = getDeployedFromBinary(c.metadata[DEPLOYED_FROM_SOURCE] == "true")
 	c.metadata[IS_TEST_DATA] = getIsTestData()
 	c.metadata[EXIT_CODE] = strconv.Itoa(errorCode)
 }
@@ -99,9 +86,9 @@ func (c *Collector) BuildConcordEvent() ConcordEvent {
 		EventMetadata:    getEventMetadataKVPairs(c.metadata),
 		ProjectNumber:    getProjectNumber(c.blueprint),
 		ClientInstallId:  getClientInstallId(),
-		BillingAccountId: getBillingAccountId(c.blueprint),
-		IsGoogler:        getIsGoogler(),
+		BillingAccountId: c.metadata[BILLING_ACCOUNT_ID],
 		ReleaseVersion:   getReleaseVersion(),
+		IsGoogler:        getIsGoogler(),
 		LatencyMs:        getLatencyMs(c.eventStartTime),
 	}
 }
@@ -110,26 +97,6 @@ func (c *Collector) BuildConcordEvent() ConcordEvent {
 
 func getClientInstallId() string {
 	return config.GetPersistentUserId()
-}
-
-func getProjectNumber(bp config.Blueprint) string {
-	ctx := context.Background()
-	projectID := getProjectId(bp)
-
-	client, _ := resourcemanager.NewProjectsClient(ctx)
-	defer client.Close()
-
-	req := &resourcemanagerpb.GetProjectRequest{
-		Name: fmt.Sprintf("projects/%s", projectID),
-	}
-
-	project, err := client.GetProject(ctx, req)
-
-	if err != nil || project == nil || project.Name == "" {
-		return ""
-	} else {
-		return strings.TrimPrefix(project.Name, "projects/")
-	}
 }
 
 func getReleaseVersion() string {
@@ -147,31 +114,15 @@ func getCommandName(cmd *cobra.Command) string {
 }
 
 func getCmdFlags(cmd *cobra.Command) string {
-	flags := make([]string, 0)
+	numFlags := cmd.Flags().NFlag()
+	if numFlags == 0 {
+		return ""
+	}
+	flags := make([]string, 0, numFlags)
 	cmd.Flags().Visit(func(f *pflag.Flag) {
 		flags = append(flags, f.Name)
 	})
 	return strings.Join(flags, ",")
-}
-
-func getBlueprintName(bp config.Blueprint) string {
-	return bp.BlueprintName
-}
-
-func getDeploymentFile(cmd *cobra.Command) string {
-	var path string
-	if flag := cmd.Flag("deployment-file"); flag != nil && flag.Value.String() != "" {
-		path = flag.Value.String()
-	}
-	path = strings.TrimPrefix(path, "./")
-
-	if path != "" {
-		// Lazily load the predefined files here
-		if slices.Contains(fetchStandardDeploymentFiles(), path) {
-			return path
-		}
-	}
-	return ""
 }
 
 func getIsGke(modulesList []string) string {
@@ -184,6 +135,23 @@ func getIsSlurm(modulesList []string) string {
 
 func getIsVmInstance(modulesList []string) string {
 	return ifModulesMatchPatterns(modulesList, isVmInstanceModulePatterns)
+}
+
+func getProjectNumber(bp config.Blueprint) string {
+	projectID := getKeyFromBlueprint("project_id", bp)
+	if projectID == "" {
+		return ""
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), timeout10Sec)
+	defer cancel()
+
+	projectName, err := fetchProjectName(ctx, projectID)
+	if err != nil || projectName == "" {
+		return ""
+	}
+
+	return strings.TrimPrefix(projectName, "projects/")
 }
 
 func getMachineType(bp config.Blueprint) string {
@@ -219,148 +187,22 @@ func getMachineType(bp config.Blueprint) string {
 }
 
 func getRegion(bp config.Blueprint) string {
-	val, err := bp.Eval(config.GlobalRef("region").AsValue())
-	if err == nil {
-		region, _ := val.Unmark()
-		if !region.IsNull() && region.Type() == cty.String {
-			return region.AsString()
-		}
-	}
-	return ""
+	return getKeyFromBlueprint("region", bp)
 }
 
 func getZone(bp config.Blueprint) string {
-	val, err := bp.Eval(config.GlobalRef("zone").AsValue())
-	if err == nil {
-		zone, _ := val.Unmark()
-		if !zone.IsNull() && zone.Type() == cty.String {
-			return zone.AsString()
-		}
-	}
-	return ""
+	return getKeyFromBlueprint("zone", bp)
 }
-
-func getProvisioningMode() string {
-	return "test"
-}
-
-// // getProvisioningMode extracts the unique consumption options (spot, reservation, on-demand)
-// // used across all compute modules in the provided blueprint.
-// func getProvisioningMode(bp config.Blueprint) string {
-// 	// Use a map as a set to keep track of unique modes
-// 	modesSet := make(map[string]bool)
-// 	hasCompute := false
-// 	allComputeSpotOrRes := true
-
-// 	const (
-// 		ModeSpot        = "spot"
-// 		ModeReservation = "reservation"
-// 		ModeOnDemand    = "on-demand"
-// 	)
-
-// 	// Iterate through all modules in the blueprint
-// 	for _, mod := range config.GetAllModules(&bp) {
-// 		source := strings.ToLower(mod.Source)
-
-// 		// We are primarily interested in compute-related modules
-// 		isCompute := strings.Contains(source, "compute_engine") ||
-// 			strings.Contains(source, "slurm") ||
-// 			strings.Contains(source, "gke_node_pool") ||
-// 			strings.Contains(source, "batch")
-
-// 		if isCompute {
-// 			hasCompute = true
-// 			isSpot := false
-// 			isRes := false
-
-// 			settings := mod.Settings
-
-// 			// 1. Check for Spot / Preemptible indicators
-// 			if settings.Has("spot") {
-// 				val, _ := settings.Get("spot").UnmarkDeep()
-// 				if val.Type() == cty.Bool && val.True() {
-// 					isSpot = true
-// 				}
-// 			}
-// 			if settings.Has("preemptible") {
-// 				val, _ := settings.Get("preemptible").UnmarkDeep()
-// 				if val.Type() == cty.Bool && val.True() {
-// 					isSpot = true
-// 				}
-// 			}
-// 			if settings.Has("enable_spot_vm") {
-// 				val, _ := settings.Get("enable_spot_vm").UnmarkDeep()
-// 				if val.Type() == cty.Bool && val.True() {
-// 					isSpot = true
-// 				}
-// 			}
-// 			if settings.Has("provisioning_model") {
-// 				val, _ := settings.Get("provisioning_model").UnmarkDeep()
-// 				if val.Type() == cty.String && strings.ToUpper(val.AsString()) == "SPOT" {
-// 					isSpot = true
-// 				}
-// 			}
-
-// 			// 2. Check for Reservation indicators
-// 			if settings.Has("reservation_affinity") {
-// 				isRes = true
-// 			}
-// 			if settings.Has("reservation_name") {
-// 				val, _ := settings.Get("reservation_name").UnmarkDeep()
-// 				if val.Type() == cty.String && val.AsString() != "" {
-// 					isRes = true
-// 				}
-// 			}
-// 			if settings.Has("consume_reservation_type") {
-// 				val, _ := settings.Get("consume_reservation_type").UnmarkDeep()
-// 				if val.Type() == cty.String && val.AsString() != "" && val.AsString() != "NO_RESERVATION" {
-// 					isRes = true
-// 				}
-// 			}
-
-// 			// Record the modes found for this module
-// 			if isSpot {
-// 				modesSet[ModeSpot] = true
-// 			}
-// 			if isRes {
-// 				modesSet[ModeReservation] = true
-// 			}
-
-// 			// If it's a compute module but uses neither spot nor reservations, it falls back to on-demand
-// 			if !isSpot && !isRes {
-// 				allComputeSpotOrRes = false
-// 			}
-// 		}
-// 	}
-
-// 	// Add "on-demand" if there was at least one compute module that wasn't strictly spot or reservation
-// 	if hasCompute && !allComputeSpotOrRes {
-// 		modesSet[ModeOnDemand] = true
-// 	}
-
-// 	// Convert the set to a slice
-// 	var modes []string
-// 	for mode := range modesSet {
-// 		modes = append(modes, mode)
-// 	}
-
-// 	return strings.Join(modes, ",")
-// }
-
-// func getModules(modulesList []string) string {
-// 	return strings.Join(modulesList, ",")
-// }
 
 // getModules returns a comma-separated string of sanitized module names.
 // It checks each module in the provided list against the officially predefined standardModules as per the user's version.
 // Standard modules are preserved, while any unrecognized module is replaced with "Custom" to protect user privacy and avoid exposing proprietary module paths.
 func getModules(modulesList []string) string {
-	// If the blueprint has no modules, return empty string
 	if len(modulesList) == 0 {
 		return ""
 	}
 
-	standardModules := fetchStandardModules()
+	standardModules := config.GetPredefinedModules()
 
 	// If standardModules is empty due to a network fetch failure, the telemetry payload will correctly report "UNVERIFIED", rather than falsely implying the blueprint had no modules.
 	if len(standardModules) == 0 {
@@ -378,16 +220,6 @@ func getModules(modulesList []string) string {
 
 	return strings.Join(sanitizedModules, ",")
 }
-
-// func logModule(module config.Module) {
-// 	logging.Info("MMM: Source: %v", module.Source)
-// 	logging.Info("MMM: Kind: %v", module.Kind)
-// 	logging.Info("MMM: ID: %v", module.ID)
-// 	logging.Info("MMM: Use: %v", module.Use)
-// 	logging.Info("MMM: Outputs: %v", module.Outputs)
-// 	logging.Info("MMM: Settings: %v", module.Settings)
-// 	logging.Info("\n\n\n")
-// }
 
 func getOSName() string {
 	return runtime.GOOS
@@ -407,60 +239,62 @@ func getOSVersion() string {
 	}
 }
 
+var tfVersionFunc = shell.TfVersion
+
+// getTerraformVersion returns the version of the Terraform in use.
 func getTerraformVersion() string {
-	version, err := shell.TfVersion()
+	version, err := tfVersionFunc()
 	if err != nil {
-		return "Unknown"
+		return ""
 	}
 	return version
 }
 
-// getDeployedFromSource returns "true" if the CLI is being run from inside a Git repository,
-// indicating the user likely cloned the code and built it locally.
-func getDeployedFromSource() string {
-	exePath, err := os.Executable()
-	if err != nil {
-		return "false"
-	}
-	exeDir := filepath.Dir(exePath)
-	gitPath := filepath.Join(exeDir, ".git")
+func getBillingAccountId(bp config.Blueprint) string {
+	projectID := getKeyFromBlueprint("project_id", bp)
+	if projectID != "" {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
 
-	// Check if the .git folder exists in the same directory.
-	if _, err := os.Stat(gitPath); err == nil {
-		return "true"
+		billingAccount := getProjectBillingAccount(ctx, projectID)
+		if billingAccount != "" {
+			return strings.TrimPrefix(billingAccount, "billingAccounts/")
+		}
 	}
-
-	return "false"
+	return ""
 }
 
-// If not deployed from source, deployed from binary.
-func getDeployedFromBinary(deployedFromSource bool) string {
-	return fmt.Sprintf("%v", !deployedFromSource)
+// getIsGoogler determines if the credentials belong to a Google internal user or an internal CI service account.
+func getIsGoogler() bool {
+	// Check Application Default Credentials (ADC) for Service Accounts.
+	// CI pipelines usually inject credentials via this environment variable.
+	adcPath := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
+	if adcPath != "" {
+		isInternal, err := checkADCForInternalUser(adcPath)
+		if err == nil && isInternal {
+			return true
+		}
+	}
+
+	// Fall back to checking the active gcloud authenticated account.
+	ctx, cancel := context.WithTimeout(context.Background(), timeout2Sec)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, "gcloud", "config", "get-value", "core/account")
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+
+	if err := cmd.Run(); err == nil && stdout.Len() > 0 {
+		email := strings.TrimSpace(stdout.String())
+		if isInternalEmail(email) {
+			return true
+		}
+	}
+	return false
 }
 
-// This method intentionally returns "true", as all current telemetry is in testing phase.
+// This method intentionally returns "true", as all telemetry is in testing phase currently.
 func getIsTestData() string {
 	return "true" // do not modify
-}
-
-func getBillingAccountId(bp config.Blueprint) string {
-	projectID := getProjectId(bp)
-	if projectID == "" {
-		return ""
-	}
-
-	ctx := context.Background()
-	billingAccount := getProjectBillingAccount(ctx, projectID)
-	if billingAccount == "" {
-		return ""
-	} else {
-		return strings.TrimPrefix(billingAccount, "billingAccounts/")
-	}
-}
-
-// getIsGoogler identifies if the CLI is being run by an internal Google user.
-func getIsGoogler() bool {
-	return isInternalUser()
 }
 
 func getLatencyMs(eventStartTime time.Time) int64 {

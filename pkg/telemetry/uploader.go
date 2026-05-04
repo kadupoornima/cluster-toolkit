@@ -27,10 +27,6 @@ import (
 )
 
 func Flush(payload LogRequest) {
-	if !config.IsTelemetryEnabled() {
-		return
-	}
-
 	PrintLogRequest(payload) // remove
 
 	jsonData, err := json.Marshal(payload)
@@ -40,41 +36,45 @@ func Flush(payload LogRequest) {
 	}
 
 	client := &http.Client{
-		Timeout: HttpServerTimeout,
+		Timeout: timeout10Sec,
 	}
 
 	// dummy request
-	resp, reqErr := client.Post(HttpDummy, "application/json", strings.NewReader(string(jsonData)))
-	if reqErr != nil {
-		fmt.Printf("Request failed: %v\n", reqErr)
+	respd, errd := client.Post(HttpDummy, "application/json", strings.NewReader(string(jsonData)))
+	if errd != nil {
+		fmt.Printf("Request failed: %v\n", errd)
 		return
 	}
-	resp.Body.Close()
+	respd.Body.Close()
 	// end
 
-	u, _ := url.Parse(ClearcutProdURL)
+	u, _ := url.Parse(clearcutProdURL)
 	params := url.Values{}
 	params.Add("format", "json_proto")
 	u.RawQuery = params.Encode()
 
 	req, err := http.NewRequest("POST", u.String(), bytes.NewBuffer(jsonData))
 	if err != nil {
-		fmt.Printf("Error creating request: %v\n", err)
+		logging.Error("Error creating Telemetry request to Clearcut: %v", err)
 		return
 	}
 	req.Header.Set("User-Agent", fmt.Sprintf("%v/%v", CLUSTER_TOOLKIT, config.GetToolkitVersion()))
 	req.Header.Set("Content-Type", "application/json")
 
-	resp2, err2 := client.Do(req)
+	resp, err := client.Do(req)
 
-	if err2 != nil {
-		logging.Error("Error sending request: %v\n", err)
+	if err != nil {
+		logging.Error("Error sending Telemetry request to Clearcut: %v", err)
 		return
 	}
-	defer resp2.Body.Close()
+	defer resp.Body.Close()
 
-	body, _ := io.ReadAll(resp2.Body)
-	logging.Info("Status: %v\n", resp2.Status)
+	body, _ := io.ReadAll(resp.Body)
+	logging.Info("Status: %v\n", resp.Status)
 	logging.Info("Response: %v\n", string(body))
 
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(resp.Body)
+		logging.Error("Telemetry request failed with status %d: %s", resp.StatusCode, string(body))
+	}
 }

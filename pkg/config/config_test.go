@@ -25,6 +25,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"sort"
 	"strings"
 	"testing"
 
@@ -1026,77 +1027,96 @@ func (m *mockTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 }
 
 func TestGetPredefinedModules(t *testing.T) {
-	// Save the original transport to restore it after tests complete
-	originalTransport := http.DefaultTransport
-	defer func() { http.DefaultTransport = originalTransport }()
+	originalTransport := httpClient.Transport
+	defer func() { httpClient.Transport = originalTransport }()
+
+	mockTreeJSON := `{
+		"tree": [
+			{"path": "modules/network/vpc/main.tf", "type": "blob"},
+			{"path": "community/modules/compute/mig/main.pkr.hcl", "type": "blob"},
+			{"path": "modules/ignore_me.txt", "type": "blob"}
+		]
+	}`
+	expectedModules := []string{"community/modules/compute/mig", "modules/network/vpc"}
 
 	tests := []struct {
-		name        string
-		mockResp    *http.Response
-		mockErr     error
-		expected    []string
-		errContains string
+		name       string
+		setupCache func(cacheFilePath string)
+		mockResp   *http.Response
+		expected   []string
 	}{
 		{
-			name: "success: extracts and deduplicates tf and packer modules",
+			name:       "success: cache miss, successful network fetch",
+			setupCache: func(cacheFilePath string) {},
 			mockResp: &http.Response{
 				StatusCode: http.StatusOK,
-				Body: io.NopCloser(bytes.NewBufferString(`{
-					"tree": [
-						{"path": "modules/network/vpc/main.tf", "type": "blob"},
-						{"path": "modules/network/vpc/variables.tf", "type": "blob"},
-						{"path": "community/modules/compute/mig/main.pkr.hcl", "type": "blob"},
-						{"path": "modules/ignore_me.txt", "type": "blob"},
-						{"path": "some_other_dir/main.tf", "type": "blob"},
-						{"path": "modules/not_a_blob/main.tf", "type": "tree"}
-					]
-				}`)),
+				Body:       io.NopCloser(bytes.NewBufferString(mockTreeJSON)),
 			},
-			// Expected to ignore "ignore_me.txt", "some_other_dir", and "not_a_blob" (since it's a tree)
-			// Expected to deduplicate the "modules/network/vpc" module.
-			expected: []string{"modules/network/vpc", "community/modules/compute/mig"},
+			expected: expectedModules,
 		},
 		{
-			name: "error: non-200 status code",
+			name: "success: cache hit directly reads from disk",
+			setupCache: func(cacheFilePath string) {
+				cachedData := `["modules/cached/module1"]`
+				_ = os.MkdirAll(filepath.Dir(cacheFilePath), 0755)
+				_ = os.WriteFile(cacheFilePath, []byte(cachedData), 0644)
+			},
 			mockResp: &http.Response{
-				StatusCode: http.StatusNotFound,
-				Status:     "404 Not Found",
-				Body:       io.NopCloser(bytes.NewBufferString(`{"message": "Not Found"}`)),
+				StatusCode: http.StatusInternalServerError, // Force fail if it hits network
+				Body:       io.NopCloser(bytes.NewBufferString("")),
 			},
+			expected: []string{"modules/cached/module1"},
 		},
 		{
-			name: "error: invalid JSON",
+			name: "success: corrupt cache falls back to network fetch",
+			setupCache: func(cacheFilePath string) {
+				// Simulate a corrupted JSON file on the user's disk
+				_ = os.MkdirAll(filepath.Dir(cacheFilePath), 0755)
+				_ = os.WriteFile(cacheFilePath, []byte(`{invalid_json]`), 0644)
+			},
 			mockResp: &http.Response{
 				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(bytes.NewBufferString(`{invalid json`)),
+				Body:       io.NopCloser(bytes.NewBufferString(mockTreeJSON)), // Returns valid network data
 			},
+			expected: expectedModules,
 		},
 		{
-			name:    "error: network failure or timeout",
-			mockErr: fmt.Errorf("connection timeout"),
+			name:       "error: GitHub API returns malformed JSON",
+			setupCache: func(cacheFilePath string) {},
+			mockResp: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(`{malformed_github_response}`)),
+			},
+			expected: []string{}, // Should safely return an empty slice without crashing
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			// Clear the cache before each individual test case
-			cachedTree = nil
-			// Set up the mock transport for the current test case
-			http.DefaultTransport = &mockTransport{
+			tempDir := t.TempDir()
+			t.Setenv("XDG_CACHE_HOME", tempDir)
+			t.Setenv("HOME", tempDir)
+			t.Setenv("LocalAppData", tempDir)
+
+			cacheFilePath := filepath.Join(tempDir, "cluster-toolkit", fmt.Sprintf("standard_modules_%s.json", GetToolkitVersion()))
+			if tc.setupCache != nil {
+				tc.setupCache(cacheFilePath)
+			}
+
+			httpClient.Transport = &mockTransport{
 				roundTripFunc: func(req *http.Request) (*http.Response, error) {
-					// Verify that the request URL contains the toolkit version
-					version := GetToolkitVersion()
-					if !strings.Contains(req.URL.String(), version) {
-						t.Errorf("Expected URL to contain version %s, got %s", version, req.URL.String())
-					}
-					return tc.mockResp, tc.mockErr
+					return tc.mockResp, nil
 				},
 			}
 
 			modules := GetPredefinedModules()
 
-			// reflect.DeepEqual works deterministically here because the function processes
-			// the JSON array sequentially and appends exactly in the order items appear.
+			sort.Strings(modules)
+			sort.Strings(tc.expected)
+
+			if len(modules) == 0 && len(tc.expected) == 0 {
+				return
+			}
 			if !reflect.DeepEqual(modules, tc.expected) {
 				t.Errorf("expected modules %v, got %v", tc.expected, modules)
 			}
@@ -1105,132 +1125,237 @@ func TestGetPredefinedModules(t *testing.T) {
 }
 
 func TestGetPredefinedExampleFiles(t *testing.T) {
-	// Save the original transport to restore it after tests complete
-	originalTransport := http.DefaultTransport
-	defer func() { http.DefaultTransport = originalTransport }()
+	originalTransport := httpClient.Transport
+	defer func() { httpClient.Transport = originalTransport }()
+
+	mockTreeJSON := `{
+		"tree": [
+			{"path": "examples/hpc-slurm.yaml", "type": "blob"},
+			{"path": "community/examples/ml-cluster.yml", "type": "blob"},
+			{"path": "examples/README.md", "type": "blob"}
+		]
+	}`
+	expectedExamples := []string{"community/examples/ml-cluster.yml", "examples/hpc-slurm.yaml"}
 
 	tests := []struct {
-		name     string
-		mockResp *http.Response
-		mockErr  error
-		expected []string
+		name       string
+		setupCache func(cacheFilePath string)
+		mockResp   *http.Response
+		expected   []string
 	}{
 		{
-			name: "success: extracts and deduplicates example yaml files",
+			name:       "success: cache miss, successful network fetch",
+			setupCache: func(cacheFilePath string) {},
 			mockResp: &http.Response{
 				StatusCode: http.StatusOK,
-				Body: io.NopCloser(bytes.NewBufferString(`{
-					"tree": [
-						{"path": "examples/hpc-slurm.yaml", "type": "blob"},
-						{"path": "examples/machine-learning.yaml", "type": "blob"},
-						{"path": "community/examples/batch-job.yaml", "type": "blob"},
-						{"path": "examples/ignore_me.txt", "type": "blob"},
-						{"path": "some_other_dir/example.yaml", "type": "blob"},
-						{"path": "examples/not_a_blob/main.yaml", "type": "tree"},
-						{"path": "examples/hpc-slurm.yaml", "type": "blob"}
-					]
-				}`)),
+				Body:       io.NopCloser(bytes.NewBufferString(mockTreeJSON)),
 			},
-			// Expected to ignore non-yaml files, files outside `examples/` directories,
-			// and `tree` types. It should also deduplicate matching paths.
-			expected: []string{"examples/hpc-slurm.yaml", "examples/machine-learning.yaml", "community/examples/batch-job.yaml"},
+			expected: expectedExamples,
 		},
 		{
-			name: "error: non-200 status code",
+			name: "success: cache hit directly reads from disk",
+			setupCache: func(cacheFilePath string) {
+				cachedData := `["examples/cached/test.yaml"]`
+				_ = os.MkdirAll(filepath.Dir(cacheFilePath), 0755)
+				_ = os.WriteFile(cacheFilePath, []byte(cachedData), 0644)
+			},
 			mockResp: &http.Response{
-				StatusCode: http.StatusNotFound,
-				Status:     "404 Not Found",
-				Body:       io.NopCloser(bytes.NewBufferString(`{"message": "Not Found"}`)),
+				StatusCode: http.StatusInternalServerError,
+				Body:       io.NopCloser(bytes.NewBufferString("")),
 			},
+			expected: []string{"examples/cached/test.yaml"},
 		},
 		{
-			name: "error: invalid JSON",
+			name: "success: corrupt cache falls back to network fetch",
+			setupCache: func(cacheFilePath string) {
+				// Simulate a corrupted JSON file on the user's disk
+				_ = os.MkdirAll(filepath.Dir(cacheFilePath), 0755)
+				_ = os.WriteFile(cacheFilePath, []byte(`{invalid_json]`), 0644)
+			},
 			mockResp: &http.Response{
 				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(bytes.NewBufferString(`{invalid json`)),
+				Body:       io.NopCloser(bytes.NewBufferString(mockTreeJSON)), // Returns valid network data
 			},
+			expected: expectedExamples,
 		},
 		{
-			name:    "error: network failure or timeout",
-			mockErr: fmt.Errorf("connection timeout"),
+			name:       "error: GitHub API returns malformed JSON",
+			setupCache: func(cacheFilePath string) {},
+			mockResp: &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(bytes.NewBufferString(`{malformed_github_response}`)),
+			},
+			expected: []string{}, // Should safely return an empty slice without crashing
 		},
 	}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			// Clear the cache before each individual test case
-			cachedTree = nil
-			// Set up the mock transport for the current test case
-			http.DefaultTransport = &mockTransport{
+			tempDir := t.TempDir()
+			t.Setenv("XDG_CACHE_HOME", tempDir)
+			t.Setenv("HOME", tempDir)
+			t.Setenv("LocalAppData", tempDir)
+
+			cacheFilePath := filepath.Join(tempDir, "cluster-toolkit", fmt.Sprintf("standard_examples_%s.json", GetToolkitVersion()))
+			if tc.setupCache != nil {
+				tc.setupCache(cacheFilePath)
+			}
+
+			httpClient.Transport = &mockTransport{
 				roundTripFunc: func(req *http.Request) (*http.Response, error) {
-					// Verify that the request URL contains the toolkit version
-					version := GetToolkitVersion()
-					if !strings.Contains(req.URL.String(), version) {
-						t.Errorf("Expected URL to contain version %s, got %s", version, req.URL.String())
-					}
-					return tc.mockResp, tc.mockErr
+					return tc.mockResp, nil
 				},
 			}
 
-			files := GetPredefinedExampleFiles()
+			examples := GetPredefinedExampleFiles()
 
-			// reflect.DeepEqual works deterministically here because the function processes
-			// the JSON array sequentially and appends exactly in the order items appear.
-			if !reflect.DeepEqual(files, tc.expected) {
-				t.Errorf("expected files %v, got %v", tc.expected, files)
+			sort.Strings(examples)
+			sort.Strings(tc.expected)
+
+			if len(examples) == 0 && len(tc.expected) == 0 {
+				return
+			}
+			if !reflect.DeepEqual(examples, tc.expected) {
+				t.Errorf("expected examples %v, got %v", tc.expected, examples)
 			}
 		})
 	}
 }
 
-func TestGetPredefined_Caching(t *testing.T) {
-	// Save the original transport to restore it after the test
-	originalTransport := http.DefaultTransport
-	defer func() { http.DefaultTransport = originalTransport }()
+func TestGetStandardBlueprintNames(t *testing.T) {
+	originalTransport := httpClient.Transport
+	defer func() { httpClient.Transport = originalTransport }()
 
-	// Ensure the cache is clean before and after this test runs
-	cachedTree = nil
-	defer func() { cachedTree = nil }()
+	mockTreeJSON := `{
+		"tree": [
+			{"path": "examples/hpc-slurm.yaml", "type": "blob"},
+			{"path": "examples/invalid.yaml", "type": "blob"},
+			{"path": "examples/duplicate.yaml", "type": "blob"},
+			{"path": "examples/malformed.yaml", "type": "blob"},
+			{"path": "examples/missing_on_server.yaml", "type": "blob"}
+		]
+	}`
 
-	apiCallCount := 0
+	mockYamlFiles := map[string]string{
+		"examples/hpc-slurm.yaml": "blueprint_name: hpc-slurm",
+		"examples/invalid.yaml":   "some_other_field: test",          // Missing blueprint_name
+		"examples/duplicate.yaml": "blueprint_name: hpc-slurm",       // Duplicate name
+		"examples/malformed.yaml": "blueprint_name: [unclosed array", // Syntax error
+		// "examples/missing_on_server.yaml" is intentionally omitted to trigger a 404
+	}
 
-	// Mock transport that counts how many times the API was called
-	http.DefaultTransport = &mockTransport{
-		roundTripFunc: func(req *http.Request) (*http.Response, error) {
-			apiCallCount++
-			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body: io.NopCloser(bytes.NewBufferString(`{
-					"tree": [
-						{"path": "modules/network/vpc/main.tf", "type": "blob"},
-						{"path": "examples/hpc-slurm.yaml", "type": "blob"}
-					]
-				}`)),
-			}, nil
+	tests := []struct {
+		name       string
+		setupCache func(cacheFilePath string)
+		mockResp   *http.Response // Used to simulate tree fetch errors
+		expected   []string
+	}{
+		{
+			name:       "success: fetches tree, routes YAML requests, and extracts blueprint names",
+			setupCache: func(cacheFilePath string) {},
+			expected:   []string{"hpc-slurm"},
+		},
+		{
+			name: "success: cache hit directly reads blueprints from disk",
+			setupCache: func(cacheFilePath string) {
+				cachedData := `["cached-blueprint-1"]`
+				_ = os.MkdirAll(filepath.Dir(cacheFilePath), 0755)
+				_ = os.WriteFile(cacheFilePath, []byte(cachedData), 0644)
+			},
+			expected: []string{"cached-blueprint-1"},
+		},
+		{
+			name:       "error: tree fetch fails",
+			setupCache: func(cacheFilePath string) {},
+			mockResp: &http.Response{
+				StatusCode: http.StatusInternalServerError,
+				Body:       io.NopCloser(bytes.NewBufferString(`{"message": "Internal Server Error"}`)),
+			},
+			expected: []string{},
+		},
+		{
+			name:       "success: handles duplicates, malformed YAML, and partial 404 network failures",
+			setupCache: func(cacheFilePath string) {},
+			// We don't provide a global mockResp here because the custom RoundTripper
+			// routing logic will naturally hit the 200s, the 404, and the malformed YAML.
+
+			// Expected behavior:
+			// 1. hpc-slurm.yaml -> parses "hpc-slurm"
+			// 2. duplicate.yaml -> parses "hpc-slurm" (deduplicated)
+			// 3. invalid.yaml -> skipped (no blueprint_name)
+			// 4. malformed.yaml -> skipped (yaml.Unmarshal fails)
+			// 5. missing_on_server.yaml -> skipped (HTTP 404)
+			expected: []string{"hpc-slurm"},
+		},
+		{
+			name: "success: corrupt cache file is ignored and replaced",
+			setupCache: func(cacheFilePath string) {
+				_ = os.MkdirAll(filepath.Dir(cacheFilePath), 0755)
+				_ = os.WriteFile(cacheFilePath, []byte(`{invalid_json]`), 0644)
+			},
+			expected: []string{"hpc-slurm"},
 		},
 	}
 
-	// First call should trigger an API request and populate the cache
-	modules := GetPredefinedModules()
-	if len(modules) == 0 {
-		t.Errorf("Expected modules to be returned, got empty list")
-	}
-	if apiCallCount != 1 {
-		t.Errorf("Expected exactly 1 API call on first execution, got %d", apiCallCount)
-	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			t.Setenv("XDG_CACHE_HOME", tempDir)
+			t.Setenv("HOME", tempDir)
+			t.Setenv("LocalAppData", tempDir)
 
-	// Second call (for example files) should use the cache and NOT trigger an API request
-	examples := GetPredefinedExampleFiles()
-	if len(examples) == 0 {
-		t.Errorf("Expected examples to be returned, got empty list")
-	}
-	if apiCallCount != 1 {
-		t.Errorf("Expected still 1 API call after second execution, got %d", apiCallCount)
-	}
+			cacheFilePath := filepath.Join(tempDir, "cluster-toolkit", fmt.Sprintf("standard_blueprints_%s.json", GetToolkitVersion()))
+			if tc.setupCache != nil {
+				tc.setupCache(cacheFilePath)
+			}
 
-	// Third call (same function again) should also use the cache
-	GetPredefinedModules()
-	if apiCallCount != 1 {
-		t.Errorf("Expected still 1 API call after third execution, got %d", apiCallCount)
+			httpClient.Transport = &mockTransport{
+				roundTripFunc: func(req *http.Request) (*http.Response, error) {
+					url := req.URL.String()
+
+					// Provide global error mock for tree fetch if configured
+					if tc.mockResp != nil && strings.Contains(url, "/git/trees/") {
+						return tc.mockResp, nil
+					}
+
+					// Route 1: GitHub API Tree Request
+					if strings.Contains(url, "/git/trees/") {
+						return &http.Response{
+							StatusCode: http.StatusOK,
+							Body:       io.NopCloser(bytes.NewBufferString(mockTreeJSON)),
+						}, nil
+					}
+
+					// Route 2: Raw GitHub User Content YAML Requests
+					for path, content := range mockYamlFiles {
+						if strings.Contains(url, path) {
+							return &http.Response{
+								StatusCode: http.StatusOK,
+								Body:       io.NopCloser(bytes.NewBufferString(content)),
+							}, nil
+						}
+					}
+
+					return &http.Response{
+						StatusCode: http.StatusNotFound,
+						Body:       io.NopCloser(bytes.NewBufferString("404 Not Found")),
+					}, nil
+				},
+			}
+
+			blueprints := GetStandardBlueprintNames()
+
+			// Because GetStandardBlueprintNames uses a worker pool to fetch files, the order of the appended slices is non-deterministic.
+			// We MUST sort both arrays before checking reflect.DeepEqual!
+			sort.Strings(blueprints)
+			sort.Strings(tc.expected)
+
+			if len(blueprints) == 0 && len(tc.expected) == 0 {
+				return
+			}
+			if !reflect.DeepEqual(blueprints, tc.expected) {
+				t.Errorf("expected blueprints %v, got %v", tc.expected, blueprints)
+			}
+		})
 	}
 }

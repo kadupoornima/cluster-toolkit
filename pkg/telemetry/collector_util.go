@@ -16,23 +16,21 @@ package telemetry
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-
 	"hpc-toolkit/pkg/config"
-	"hpc-toolkit/pkg/logging"
 	"os"
 	"os/exec"
 	"regexp"
-	"slices"
-	"strconv"
 	"strings"
 
-	billing "cloud.google.com/go/billing/apiv1"
 	"cloud.google.com/go/billing/apiv1/billingpb"
 	"github.com/zclconf/go-cty/cty"
+
+	billing "cloud.google.com/go/billing/apiv1"
+	resourcemanager "cloud.google.com/go/resourcemanager/apiv3"
+	resourcemanagerpb "cloud.google.com/go/resourcemanager/apiv3/resourcemanagerpb"
 )
 
 func getBlueprint(args []string) config.Blueprint {
@@ -54,20 +52,14 @@ func getEventMetadataKVPairs(sourceMetadata map[string]string) []map[string]stri
 	return eventMetadata
 }
 
-//	func getModulesWithPattern(pattern string, bp config.Blueprint) []config.Module {
-//		modules := make([]config.Module, 0)
-//		for _, m := range config.GetAllModules(&bp) {
-//			matched, _ := regexp.Match(pattern, []byte(m.Source))
-//			if matched {
-//				// logging.Info("Source: %v", m.Source)
-//				// logging.Info("Items: %v", m.Settings.Items())
-//				// logging.Info("m.Settings.Get(\"machine_type\"): %v", m.Settings.Get("machine_type"))
-//				// logging.Info("Keys: %v", m.Settings.Keys())
-//				modules = append(modules, m)
-//			}
-//		}
-//		return modules
-//	}
+func getBpModulesList(bp config.Blueprint) []string {
+	moduleInfos := config.GetAllBpModules(&bp)
+	modules := make([]string, len(moduleInfos))
+	for i, module := range moduleInfos {
+		modules[i] = string(module.Source)
+	}
+	return modules
+}
 
 func getModulesWithPattern(pattern string, bp config.Blueprint) []config.Module {
 	re, err := regexp.Compile(pattern)
@@ -84,41 +76,29 @@ func getModulesWithPattern(pattern string, bp config.Blueprint) []config.Module 
 }
 
 func ifModulesMatchPatterns(modulesList []string, patterns []string) string {
-	matched := false
-	matched = slices.ContainsFunc(modulesList, func(s string) bool {
-		for _, pattern := range patterns {
-			new, _ := regexp.MatchString(pattern, s)
-			matched = matched || new
+	for _, m := range modulesList {
+		for _, p := range patterns {
+			if strings.Contains(m, p) {
+				return "true"
+			}
 		}
-		return matched
-	})
-	return strconv.FormatBool(matched)
-}
-
-func getBpModulesList(bp config.Blueprint) []string {
-	moduleInfos := make([]config.Module, 0)
-	modules := make([]string, 0)
-	moduleInfos = append(moduleInfos, config.GetAllBpModules(&bp)...)
-	for _, module := range moduleInfos {
-		modules = append(modules, string(module.Source))
 	}
-	return modules
+	return "false"
 }
 
-func getProjectId(bp config.Blueprint) string {
-	// config.GlobalRef("project_id").AsValue() creates a $(vars.project_id) expression to evaluate
-	val, err := bp.Eval(config.GlobalRef("project_id").AsValue())
+func getKeyFromBlueprint(key string, bp config.Blueprint) string {
+	val, err := bp.Eval(config.GlobalRef(key).AsValue())
 	if err == nil {
-		unmarked, _ := val.Unmark()
-		if !unmarked.IsNull() && unmarked.Type() == cty.String {
-			return unmarked.AsString()
+		v, _ := val.Unmark()
+		if !v.IsNull() && v.Type() == cty.String {
+			return v.AsString()
 		}
 	}
 	return ""
 }
 
 // getProjectBillingAccount fetches the billing account associated with a given GCP project in the format "billingAccounts/{billing_account_id}". If billing is disabled for the project, this will return an empty string.
-func getProjectBillingAccount(ctx context.Context, projectID string) string {
+var getProjectBillingAccount = func(ctx context.Context, projectID string) string {
 	client, err := billing.NewCloudBillingClient(ctx)
 	if err != nil {
 		return ""
@@ -134,32 +114,19 @@ func getProjectBillingAccount(ctx context.Context, projectID string) string {
 	return info.GetBillingAccountName()
 }
 
-// isInternalUser determines if the credentials belong to a Google internal user
-// or an internal CI service account.
-func isInternalUser() bool {
-	// 1. Check Application Default Credentials (ADC) for Service Accounts.
-	// CI pipelines usually inject credentials via this environment variable.
-	adcPath := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
-	if adcPath != "" {
-		isInternal, err := checkADCForInternalUser(adcPath)
-		if err == nil && isInternal {
-			return true
-		}
+// fetchProjectName retrieves the project name (which contains the project number) for a given project ID.
+var fetchProjectName = func(ctx context.Context, projectID string) (string, error) {
+	client, err := resourcemanager.NewProjectsClient(ctx)
+	if err != nil {
+		return "", err
 	}
-
-	// 2. Fall back to checking the active gcloud authenticated account.
-	cmd := exec.Command("gcloud", "config", "get-value", "core/account")
-	var stdout bytes.Buffer
-	cmd.Stdout = &stdout
-
-	if err := cmd.Run(); err == nil {
-		email := strings.TrimSpace(stdout.String())
-		if isInternalEmail(email) {
-			return true
-		}
+	defer client.Close()
+	req := &resourcemanagerpb.GetProjectRequest{Name: fmt.Sprintf("projects/%s", projectID)}
+	project, err := client.GetProject(ctx, req)
+	if err != nil {
+		return "", err
 	}
-
-	return false
+	return project.Name, nil
 }
 
 // checkADCForInternalUser parses the ADC JSON file to extract the client email.
@@ -189,14 +156,29 @@ func isInternalEmail(email string) bool {
 	}
 
 	// Allowlist specific internal Cluster Toolkit project IDs that tests use.
-	internalProjects := []string{
+	internalProjectNames := []string{
 		"hpc-toolkit-dev",
 		"hpc-toolkit-demo",
 		"hpc-toolkit-gsc",
 	}
 
-	for _, project := range internalProjects {
-		pattern := ".*" + project + ".*gserviceaccount.com"
+	for _, projectName := range internalProjectNames {
+		pattern := ".*" + projectName + ".*gserviceaccount.com"
+		matched, err := regexp.MatchString(pattern, email)
+
+		if err == nil && matched {
+			return true
+		}
+	}
+
+	// Allowlist specific internal Cluster Toolkit project numbers that tests use.
+	internalProjectNumbers := []string{
+		"508417052821",
+		"858831239249",
+		"266450182917",
+	}
+	for _, projectNum := range internalProjectNumbers {
+		pattern := ".*" + projectNum + ".*@cloudbuild.gserviceaccount.com"
 		matched, err := regexp.MatchString(pattern, email)
 
 		if err == nil && matched {
@@ -212,8 +194,7 @@ func getLinuxVersion() string {
 	// Standard way to identify Linux distribution version
 	f, err := os.Open("/etc/os-release")
 	if err != nil {
-		logging.Error("failed to open /etc/os-release: %v", err)
-		return ""
+		return "Linux (unknown version)"
 	}
 	defer f.Close()
 
@@ -239,21 +220,25 @@ func getLinuxVersion() string {
 
 // getMacVersion uses sw_vers to get the macOS product version.
 func getMacVersion() string {
-	out, err := exec.Command("sw_vers", "-productVersion").Output()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout2Sec)
+	defer cancel()
+
+	out, err := exec.CommandContext(ctx, "sw_vers", "-productVersion").Output()
 	if err != nil {
-		logging.Error("sw_vers failed: %v", err)
-		return ""
+		return "Darwin (unknown version)"
 	}
 	return strings.TrimSpace(string(out))
 }
 
 // getWindowsVersion uses the ver command to get the Windows version.
 func getWindowsVersion() string {
-	cmd := exec.Command("cmd", "/c", "ver")
+	ctx, cancel := context.WithTimeout(context.Background(), timeout2Sec)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "cmd", "/c", "ver")
 	out, err := cmd.Output()
 	if err != nil {
-		logging.Error("ver failed: %v", err)
-		return ""
+		return "Windows (unknown version)"
 	}
 	return strings.TrimSpace(string(out))
 }
@@ -264,19 +249,5 @@ func parseOsReleaseField(line string) string {
 	if len(parts) != 2 {
 		return ""
 	}
-	return strings.Trim(parts[1], `"`)
+	return strings.Trim(parts[1], "'\"")
 }
-
-// func logBlueprint(bp config.Blueprint) {
-// 	logging.Info("BlueprintName: %v\n", bp.BlueprintName)
-// 	logging.Info("GhpcVersion: %v\n", bp.GhpcVersion)
-// 	logging.Info("Validators: %v\n", bp.Validators)
-// 	logging.Info("ValidationLevel: %v\n", bp.ValidationLevel)
-// 	logging.Info("Vars: %v\n", bp.Vars)
-// 	logging.Info("Groups: %v\n", bp.Groups)
-// 	logging.Info("TerraformBackendDefaults: %v\n", bp.TerraformBackendDefaults)
-// 	logging.Info("TerraformProviders: %v\n", bp.TerraformProviders)
-// 	logging.Info("ToolkitModulesURL: %v\n", bp.ToolkitModulesURL)
-// 	logging.Info("ToolkitModulesVersion: %v\n", bp.ToolkitModulesVersion)
-// 	logging.Info("YamlCtx: %v\n", bp.YamlCtx)
-// }
