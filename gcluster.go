@@ -32,6 +32,9 @@ var gitCommitInfo string
 var gitCommitHash string
 var gitInitialHash string
 
+// Whether the Toolkit is installed from source, binary, etc.
+var installationMode string
+
 func main() {
 	sourcereader.ModuleFS = moduleFS
 	cmd.GitTagVersion = gitTagVersion
@@ -39,6 +42,7 @@ func main() {
 	cmd.GitCommitInfo = gitCommitInfo
 	cmd.GitCommitHash = gitCommitHash
 	cmd.GitInitialHash = gitInitialHash
+	cmd.InstallationMode = installationMode
 	if err := cmd.Execute(); err != nil {
 		os.Exit(1)
 	}

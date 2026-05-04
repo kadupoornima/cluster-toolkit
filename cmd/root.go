@@ -35,12 +35,16 @@ import (
 
 // Git references when use Makefile
 var (
-	GitTagVersion      string
-	GitBranch          string
-	GitCommitInfo      string
-	GitCommitHash      string
-	GitInitialHash     string
+	GitTagVersion  string
+	GitBranch      string
+	GitCommitInfo  string
+	GitCommitHash  string
+	GitInitialHash string
+)
+
+var (
 	telemetryCollector *telemetry.Collector
+	InstallationMode   string
 )
 
 var (
@@ -119,7 +123,7 @@ Commit info: {{index .Annotations "commitInfo"}}
 		}
 	}
 	if config.IsTelemetryEnabled() {
-		telemetryCollector.Execute(exitCode)
+		telemetryCollector.Execute(exitCode, InstallationMode)
 	}
 	return err
 }

@@ -34,6 +34,8 @@ import (
 	"github.com/zclconf/go-cty/cty"
 )
 
+const SOURCE = "SOURCE"
+
 func TestNewCollector(t *testing.T) {
 	cmd := &cobra.Command{Use: "test"}
 	// Passing nil for args prevents getBlueprint from attempting to read a file
@@ -64,6 +66,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 		OS_VERSION,
 		TERRAFORM_VERSION,
 		BILLING_ACCOUNT_ID,
+		INSTALLATION_MODE,
 		IS_TEST_DATA,
 		EXIT_CODE,
 	}
@@ -170,7 +173,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 			}
 
 			// Run the method being tested
-			c.CollectMetrics(tt.errorCode)
+			c.CollectMetrics(tt.errorCode, SOURCE)
 
 			// Assert that all expected keys are populated in the metadata
 			for _, key := range expectedKeys {
@@ -195,7 +198,7 @@ func TestBuildConcordEvent(t *testing.T) {
 	rootCmd.AddCommand(childCmd)
 
 	c := NewCollector(childCmd, nil)
-	c.CollectMetrics(0)
+	c.CollectMetrics(0, SOURCE)
 
 	event := c.BuildConcordEvent()
 
