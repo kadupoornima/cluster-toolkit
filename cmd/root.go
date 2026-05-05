@@ -73,7 +73,7 @@ func init() {
 			logging.Error("Failure in initializing user config: %v", err)
 		}
 		initColor()
-		telemetryCollector = telemetry.NewCollector(cmd, args)
+		telemetryCollector = telemetry.NewCollector(cmd, args, InstallationMode)
 	}
 }
 
@@ -123,7 +123,7 @@ Commit info: {{index .Annotations "commitInfo"}}
 		}
 	}
 	if config.IsTelemetryEnabled() {
-		telemetryCollector.Execute(exitCode, InstallationMode)
+		telemetryCollector.Execute(exitCode)
 	}
 	return err
 }

@@ -30,6 +30,8 @@ const (
 	timeout2Sec     = 2 * time.Second
 	CLUSTER_TOOLKIT = "CLUSTER_TOOLKIT"
 	CONCORD         = "CONCORD"
+	SOURCE          = "SOURCE"
+	BINARY          = "BINARY"
 )
 
 const (
@@ -44,11 +46,12 @@ const (
 
 // Collector encapsulates the telemetry state (avoids global variables).
 type Collector struct {
-	eventCmd       *cobra.Command
-	eventArgs      []string
-	eventStartTime time.Time
-	blueprint      config.Blueprint
-	metadata       map[string]string
+	eventCmd         *cobra.Command
+	eventArgs        []string
+	eventStartTime   time.Time
+	blueprint        config.Blueprint
+	installationMode string
+	metadata         map[string]string
 
 	mu sync.Mutex // Protects state against concurrent access
 }
