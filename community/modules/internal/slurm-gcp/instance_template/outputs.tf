@@ -37,7 +37,7 @@ output "service_account" {
   value       = module.instance_template.service_account
 }
 
-output "labels" {
+output "template_labels" {
   description = "Labels attached to the instance template"
   value       = local.labels
 }
