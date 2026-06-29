@@ -153,6 +153,43 @@ func getKeyFromBlueprint(key string, bp config.Blueprint) string {
 	return ""
 }
 
+// getModuleInfoSafe safely fetches module info with a timeout to prevent hanging on network requests.
+func getModuleInfoSafe(m config.Module) (modulereader.ModuleInfo, bool) {
+	if m.Source == "" {
+		return modulereader.ModuleInfo{}, false
+	}
+
+	kindStr := m.Kind.String()
+	if kindStr == "" {
+		kindStr = config.TerraformKind.String()
+	}
+
+	if kindStr != config.TerraformKind.String() && kindStr != config.PackerKind.String() {
+		return modulereader.ModuleInfo{}, false
+	}
+
+	type result struct {
+		mi  modulereader.ModuleInfo
+		err error
+	}
+	resCh := make(chan result, 1)
+
+	go func() {
+		mi, err := modulereader.GetModuleInfo(m.Source, kindStr)
+		resCh <- result{mi: mi, err: err}
+	}()
+
+	select {
+	case res := <-resCh:
+		if res.err != nil {
+			return modulereader.ModuleInfo{}, false
+		}
+		return res.mi, true
+	case <-time.After(500 * time.Millisecond):
+		return modulereader.ModuleInfo{}, false
+	}
+}
+
 // extractExplicitSetting attempts to get the given key if explicitly defined in the module's settings.
 func extractExplicitSetting(bp config.Blueprint, key string, m config.Module) string {
 	if !m.Settings.Has(key) {
@@ -177,56 +214,21 @@ func extractExplicitSetting(bp config.Blueprint, key string, m config.Module) st
 
 // extractDefaultSetting attempts to get the key from the module's defaults, with a timeout.
 func extractDefaultSetting(key string, m config.Module) string {
-	if m.Source == "" {
-		return ""
-	}
-
-	kindStr := m.Kind.String()
-	// Default to terraform if Kind is omitted (as happens in tests or unexpanded blueprints)
-	if kindStr == "" {
-		kindStr = config.TerraformKind.String()
-	}
-
-	// Only fetch module info if the kind is valid, avoiding a fatal error in GetModuleInfo
-	if kindStr != config.TerraformKind.String() && kindStr != config.PackerKind.String() {
-		return ""
-	}
-
-	type result struct {
-		mi  modulereader.ModuleInfo
-		err error
-	}
-	resCh := make(chan result, 1)
-
-	// Use a strict timeout. GetModuleInfo can trigger network requests (e.g. git clone).
-	go func() {
-		mi, err := modulereader.GetModuleInfo(m.Source, kindStr)
-		resCh <- result{mi: mi, err: err}
-	}()
-
-	select {
-	case res := <-resCh:
-		if res.err != nil {
-			return ""
-		}
-		for _, input := range res.mi.Inputs {
+	if info, ok := getModuleInfoSafe(m); ok {
+		for _, input := range info.Inputs {
 			if input.Name == key && input.Default != nil {
-				// Verify the default is a string (protects against complex types)
 				if mType, ok := input.Default.(string); ok {
 					return mType
 				}
 			}
 		}
-	case <-time.After(500 * time.Millisecond):
-		// Timeout reached: gracefully return empty string to prevent blocking
 	}
-
 	return ""
 }
 
 // extractSettingOrDefault attempts to read a top-level setting from a module, falling back to module defaults.
-func extractSettingOrDefault(m *config.Module, key string, fallback int) int {
-	if val, ok := extractExplicitInt(m, key); ok {
+func extractSettingOrDefault(bp config.Blueprint, m *config.Module, key string, fallback int) int {
+	if val, ok := extractExplicitInt(bp, m, key); ok {
 		return val
 	}
 	if val, ok := extractDefaultInt(m, key); ok {
@@ -235,21 +237,29 @@ func extractSettingOrDefault(m *config.Module, key string, fallback int) int {
 	return fallback
 }
 
-// extractExplicitInt tries to pull the setting directly from the module's configured settings.
-func extractExplicitInt(m *config.Module, key string) (int, bool) {
+// extractExplicitInt tries to pull the setting directly from the module's configured settings, evaluating vars.
+func extractExplicitInt(bp config.Blueprint, m *config.Module, key string) (int, bool) {
 	if !m.Settings.Has(key) {
 		return 0, false
 	}
-	return ctyToInt(m.Settings.Get(key))
+
+	keyValue := m.Settings.Get(key)
+	evaluatedKey, err := bp.Eval(keyValue)
+	if err != nil {
+		return 0, false
+	}
+
+	unmarkedKey, _ := evaluatedKey.Unmark()
+	return ctyToInt(unmarkedKey)
 }
 
-// extractDefaultInt fetches the fallback default value from the module's definition.
+// extractDefaultInt fetches the fallback default value from the module's definition safely.
 func extractDefaultInt(m *config.Module, key string) (int, bool) {
-	defer func() { _ = recover() }()
-	info := m.InfoOrDie()
-	for _, input := range info.Inputs {
-		if input.Name == key && input.Default != nil {
-			return parseDefaultValue(input.Default)
+	if info, ok := getModuleInfoSafe(*m); ok {
+		for _, input := range info.Inputs {
+			if input.Name == key && input.Default != nil {
+				return parseDefaultValue(input.Default)
+			}
 		}
 	}
 	return 0, false
