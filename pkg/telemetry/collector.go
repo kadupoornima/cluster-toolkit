@@ -298,15 +298,22 @@ func getStaticNodeCountByMachineType(bp config.Blueprint, machineTypes string) s
 		var moduleCount int
 
 		switch {
+		// VM instances and Batch login nodes use 'instance_count' to define static nodes.
+		// If the variable is omitted, it defaults to allocating 1 instance.
 		case strings.Contains(src, "vm-instance") || strings.Contains(src, "batch-login-node"):
 			moduleCount = extractSettingOrDefault(m, "instance_count", 1)
 
+		// In the GKE node pool module, static_node_count refers to the static number of nodes in the node pool.
+		// If set, autoscaling will be disabled. Defaults to 0.
 		case strings.Contains(src, "gke-node-pool"):
 			moduleCount = extractSettingOrDefault(m, "static_node_count", 0)
 
+		// Standalone Slurm V6 CPU and TPU nodesets use 'node_count_static'. Defaults to 0.
 		case strings.Contains(src, "schedmd-slurm-gcp-v6-nodeset") || strings.Contains(src, "schedmd-slurm-gcp-v6-nodeset-tpu"):
 			moduleCount = extractSettingOrDefault(m, "node_count_static", 0)
 
+		// Slurm V6 Partitions can define nodesets inline as a list of objects (nodeset or nodeset_tpu).
+		// We sum up these inline counts without needing to extract their individual nested machine types.
 		case strings.Contains(src, "schedmd-slurm-gcp-v6-partition"):
 			// Sum up any inline nodeset counts without needing to extract their individual machine types
 			moduleCount = extractNestedListSum(m.Settings, "nodeset", "node_count_static") +
