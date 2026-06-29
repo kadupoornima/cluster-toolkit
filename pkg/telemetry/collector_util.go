@@ -19,26 +19,27 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"hpc-toolkit/pkg/config"
-	"hpc-toolkit/pkg/modulereader"
-	"hpc-toolkit/pkg/modulewriter"
 	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
+	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/modulereader"
+	"hpc-toolkit/pkg/modulewriter"
+
+	billing "cloud.google.com/go/billing/apiv1"
 	"cloud.google.com/go/billing/apiv1/billingpb"
+	resourcemanager "cloud.google.com/go/resourcemanager/apiv3"
+	resourcemanagerpb "cloud.google.com/go/resourcemanager/apiv3/resourcemanagerpb"
 	"github.com/spf13/cobra"
 	"github.com/zclconf/go-cty/cty"
 	"gopkg.in/yaml.v3"
-
-	billing "cloud.google.com/go/billing/apiv1"
-	resourcemanager "cloud.google.com/go/resourcemanager/apiv3"
-	resourcemanagerpb "cloud.google.com/go/resourcemanager/apiv3/resourcemanagerpb"
 )
 
 func getBlueprint(cmd *cobra.Command, args []string) config.Blueprint {
@@ -152,8 +153,8 @@ func getKeyFromBlueprint(key string, bp config.Blueprint) string {
 	return ""
 }
 
-// extractExplicitMachineType attempts to get the machine type if explicitly defined in the module's settings.
-func extractExplicitMachineType(bp config.Blueprint, key string, m config.Module) string {
+// extractExplicitSetting attempts to get the given key if explicitly defined in the module's settings.
+func extractExplicitSetting(bp config.Blueprint, key string, m config.Module) string {
 	if !m.Settings.Has(key) {
 		return ""
 	}
@@ -174,8 +175,8 @@ func extractExplicitMachineType(bp config.Blueprint, key string, m config.Module
 	return ""
 }
 
-// extractDefaultMachineType attempts to get the machine type from the module's defaults, with a timeout.
-func extractDefaultMachineType(key string, m config.Module) string {
+// extractDefaultSetting attempts to get the key from the module's defaults, with a timeout.
+func extractDefaultSetting(key string, m config.Module) string {
 	if m.Source == "" {
 		return ""
 	}
@@ -221,6 +222,97 @@ func extractDefaultMachineType(key string, m config.Module) string {
 	}
 
 	return ""
+}
+
+// extractSettingOrDefault attempts to read a top-level setting from a module, falling back to module defaults.
+func extractSettingOrDefault(m *config.Module, key string, fallback int) int {
+	if val, ok := extractExplicitInt(m, key); ok {
+		return val
+	}
+	if val, ok := extractDefaultInt(m, key); ok {
+		return val
+	}
+	return fallback
+}
+
+// extractExplicitInt tries to pull the setting directly from the module's configured settings.
+func extractExplicitInt(m *config.Module, key string) (int, bool) {
+	if !m.Settings.Has(key) {
+		return 0, false
+	}
+	return ctyToInt(m.Settings.Get(key))
+}
+
+// extractDefaultInt fetches the fallback default value from the module's definition.
+func extractDefaultInt(m *config.Module, key string) (int, bool) {
+	defer func() { _ = recover() }()
+	info := m.InfoOrDie()
+	for _, input := range info.Inputs {
+		if input.Name == key && input.Default != nil {
+			return parseDefaultValue(input.Default)
+		}
+	}
+	return 0, false
+}
+
+// parseDefaultValue handles type coercion for default values parsed from variables.tf.
+func parseDefaultValue(val any) (int, bool) {
+	switch v := val.(type) {
+	case float64:
+		return int(v), true
+	case int:
+		return v, true
+	case float32:
+		return int(v), true
+	case string:
+		if i, err := strconv.Atoi(v); err == nil {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
+// extractNestedListSum handles inline slurm partitions where nodesets are defined in a list of maps/objects.
+func extractNestedListSum(settings config.Dict, listKey string, fieldKey string) int {
+	if !settings.Has(listKey) {
+		return 0
+	}
+
+	listVal := settings.Get(listKey)
+	if !listVal.Type().IsTupleType() && !listVal.Type().IsListType() {
+		return 0
+	}
+
+	sum := 0
+	it := listVal.ElementIterator()
+	for it.Next() {
+		_, elem := it.Element()
+		if val, ok := extractIntFromMapOrObject(elem, fieldKey); ok {
+			sum += val
+		}
+	}
+	return sum
+}
+
+// extractIntFromMapOrObject unwraps either an object type or a map type to extract an integer field.
+func extractIntFromMapOrObject(elem cty.Value, fieldKey string) (int, bool) {
+	if elem.Type().IsObjectType() && elem.Type().HasAttribute(fieldKey) {
+		return ctyToInt(elem.GetAttr(fieldKey))
+	}
+	if elem.Type().IsMapType() && elem.HasIndex(cty.StringVal(fieldKey)).True() {
+		return ctyToInt(elem.Index(cty.StringVal(fieldKey)))
+	}
+	return 0, false
+}
+
+// ctyToInt converts a cty.Value into an integer if it is a valid known positive number.
+func ctyToInt(val cty.Value) (int, bool) {
+	if val.Type() == cty.Number && val.IsKnown() && !val.IsNull() {
+		if num, _ := val.AsBigFloat().Int64(); num >= 0 {
+			return int(num), true
+		}
+	}
+	return 0, false
 }
 
 // getProjectBillingAccount fetches the billing account associated with a given GCP project in the format "billingAccounts/{billing_account_id}". If billing is disabled for the project, this will return an empty string.

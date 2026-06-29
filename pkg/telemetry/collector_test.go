@@ -60,6 +60,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 		MACHINE_TYPE,
 		REGION,
 		ZONE,
+		STATIC_NODE_COUNT,
 		OS_NAME,
 		OS_VERSION,
 		TERRAFORM_VERSION,
@@ -104,7 +105,8 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 									ID:     config.ModuleID("compute_pool"),
 									Source: "modules/compute/vm-instance",
 									Settings: config.NewDict(map[string]cty.Value{
-										"machine_type": cty.StringVal("c2-standard-8"),
+										"machine_type":   cty.StringVal("c2-standard-8"),
+										"instance_count": cty.NumberIntVal(3),
 									}),
 								},
 							},
@@ -119,6 +121,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				REGION:            "us-central1",
 				ZONE:              "us-central1-a",
 				MACHINE_TYPE:      "c2-standard-8",
+				STATIC_NODE_COUNT: "\"c2-standard-8\":3",
 				OS_NAME:           getOSName(),           // Dynamically expect the current OS name
 				OS_VERSION:        getOSVersion(),        // Dynamically expect the current OS version
 				TERRAFORM_VERSION: getTerraformVersion(), // Dynamically expect the current Terraform version
@@ -126,7 +129,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 			},
 		},
 		{
-			name:             "Failure exit code with missing region, zone, and machine type",
+			name:             "Failure exit code with missing values",
 			errorCode:        1,
 			installationMode: BINARY,
 			setupCmd: func(cmd *cobra.Command) {
@@ -1704,5 +1707,123 @@ func TestCheckGcloudConfigForInternalUser_MissingFiles(t *testing.T) {
 	result := checkGcloudConfigForInternalUser()
 	if result {
 		t.Errorf("Expected checkGcloudConfigForInternalUser to return false when config files are missing")
+	}
+}
+
+func TestGetStaticNodeCountByMachineType(t *testing.T) {
+	tests := []struct {
+		name         string
+		modules      []config.Module
+		machineTypes string
+		expected     string
+	}{
+		{
+			name: "Single module with explicit count",
+			modules: []config.Module{
+				{
+					Source: "modules/compute/vm-instance",
+					Settings: config.NewDict(map[string]cty.Value{
+						"instance_count": cty.NumberIntVal(5),
+					}),
+				},
+			},
+			machineTypes: "g4",
+			expected:     `"g4":5`,
+		},
+		{
+			name: "Two modules zipping with comma-separated list",
+			modules: []config.Module{
+				{
+					Source: "modules/compute/vm-instance",
+					Settings: config.NewDict(map[string]cty.Value{
+						"instance_count": cty.NumberIntVal(2),
+					}),
+				},
+				{
+					Source: "modules/compute/gke-node-pool",
+					Settings: config.NewDict(map[string]cty.Value{
+						"static_node_count": cty.NumberIntVal(3),
+					}),
+				},
+			},
+			machineTypes: "e2-standard-4,a3u",
+			expected:     `"a3u":3,"e2-standard-4":2`,
+		},
+		{
+			name: "Same machine types are summed up",
+			modules: []config.Module{
+				{
+					Source: "community/modules/compute/schedmd-slurm-gcp-v6-nodeset",
+					Settings: config.NewDict(map[string]cty.Value{
+						"node_count_static": cty.NumberIntVal(4),
+					}),
+				},
+				{
+					Source: "community/modules/compute/schedmd-slurm-gcp-v6-nodeset",
+					Settings: config.NewDict(map[string]cty.Value{
+						"node_count_static": cty.NumberIntVal(2),
+					}),
+				},
+			},
+			machineTypes: "c2-standard-60,c2-standard-60",
+			expected:     `"c2-standard-60":6`,
+		},
+		{
+			name: "Slurm V6 Partition with Nested Lists",
+			modules: []config.Module{
+				{
+					Source: "community/modules/compute/schedmd-slurm-gcp-v6-partition",
+					Settings: config.NewDict(map[string]cty.Value{
+						"nodeset": cty.TupleVal([]cty.Value{
+							cty.ObjectVal(map[string]cty.Value{
+								"node_count_static": cty.NumberIntVal(2),
+							}),
+						}),
+						"nodeset_tpu": cty.TupleVal([]cty.Value{
+							cty.ObjectVal(map[string]cty.Value{
+								"node_count_static": cty.NumberIntVal(1),
+							}),
+						}),
+					}),
+				},
+			},
+			machineTypes: "custom-machine-type",
+			expected:     `"custom-machine-type":3`,
+		},
+		{
+			name: "Missing machine type defaults to unknown",
+			modules: []config.Module{
+				{
+					Source: "modules/compute/vm-instance",
+					Settings: config.NewDict(map[string]cty.Value{
+						"instance_count": cty.NumberIntVal(5),
+					}),
+				},
+			},
+			machineTypes: "", // Emulate trailing commas or empty types list
+			expected:     `"UNKNOWN":5`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			bp := config.Blueprint{
+				Groups: []config.Group{
+					{
+						Modules: tt.modules,
+					},
+				},
+			}
+
+			result := getStaticNodeCountByMachineType(bp, tt.machineTypes)
+
+			// Fast string comparison (if you face flakiness due to JSON key ordering,
+			// deserialize `result` into map[string]int and use reflect.DeepEqual).
+			if result != tt.expected {
+				// Due to JSON hash map serialization, "e2-standard-4" and "a3u" might swap order.
+				// The test is written in alphabetical order which json.Marshal usually respects.
+				t.Errorf("getStaticNodeCountByMachineType() = %v, want %v", result, tt.expected)
+			}
+		})
 	}
 }

@@ -16,14 +16,16 @@ package telemetry
 
 import (
 	"context"
-	"hpc-toolkit/pkg/config"
-	"hpc-toolkit/pkg/shell"
+	"encoding/json"
 	"path/filepath"
 	"runtime"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
+
+	"hpc-toolkit/pkg/config"
+	"hpc-toolkit/pkg/shell"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -69,6 +71,7 @@ func (c *Collector) CollectMetrics(errorCode int) {
 	c.metadata[REGION] = getRegion(c.blueprint)
 	c.metadata[ZONE] = getZone(c.blueprint)
 	c.metadata[MODULES] = getModules(bpModulesList)
+	c.metadata[STATIC_NODE_COUNT] = getStaticNodeCountByMachineType(c.blueprint, c.metadata[MACHINE_TYPE])
 	c.metadata[OS_NAME] = getOSName()
 	c.metadata[OS_VERSION] = getOSVersion()
 	c.metadata[TERRAFORM_VERSION] = getTerraformVersion()
@@ -217,7 +220,7 @@ func getMachineType(bp config.Blueprint) string {
 		var mType string
 		// 1. Try explicit settings first
 		for _, key := range machineTypeSettings {
-			if t := extractExplicitMachineType(bp, key, m); t != "" {
+			if t := extractExplicitSetting(bp, key, m); t != "" {
 				mType = t
 				break
 			}
@@ -225,7 +228,7 @@ func getMachineType(bp config.Blueprint) string {
 		// 2. If no explicit setting, try defaults
 		if mType == "" {
 			for _, key := range machineTypeSettings {
-				if t := extractDefaultMachineType(key, m); t != "" {
+				if t := extractDefaultSetting(key, m); t != "" {
 					mType = t
 					break
 				}
@@ -274,6 +277,53 @@ func getModules(modulesList []string) string {
 	}
 
 	return strings.Join(sanitizedModules, ",")
+}
+
+// getStaticNodeCountByMachineType aggregates the statically allocated nodes grouped by machine type.
+// machineTypes is expected to be a comma-separated string corresponding 1:1 with the modules in the blueprint.
+func getStaticNodeCountByMachineType(bp config.Blueprint, machineTypes string) string {
+	countsByMachineType := make(map[string]int)
+	mTypes := strings.Split(machineTypes, ",")
+	idx := 0
+
+	bp.WalkModulesSafe(func(_ config.ModulePath, m *config.Module) {
+		// Determine the machine type for this module based on the input string
+		machineType := "UNKNOWN"
+		if idx < len(mTypes) && strings.TrimSpace(mTypes[idx]) != "" {
+			machineType = strings.TrimSpace(mTypes[idx])
+		}
+		idx++
+
+		src := m.Source
+		var moduleCount int
+
+		switch {
+		case strings.Contains(src, "vm-instance") || strings.Contains(src, "batch-login-node"):
+			moduleCount = extractSettingOrDefault(m, "instance_count", 1)
+
+		case strings.Contains(src, "gke-node-pool"):
+			moduleCount = extractSettingOrDefault(m, "static_node_count", 0)
+
+		case strings.Contains(src, "schedmd-slurm-gcp-v6-nodeset") || strings.Contains(src, "schedmd-slurm-gcp-v6-nodeset-tpu"):
+			moduleCount = extractSettingOrDefault(m, "node_count_static", 0)
+
+		case strings.Contains(src, "schedmd-slurm-gcp-v6-partition"):
+			// Sum up any inline nodeset counts without needing to extract their individual machine types
+			moduleCount = extractNestedListSum(m.Settings, "nodeset", "node_count_static") +
+				extractNestedListSum(m.Settings, "nodeset_tpu", "node_count_static")
+		}
+
+		if moduleCount > 0 {
+			countsByMachineType[machineType] += moduleCount
+		}
+	})
+
+	out, err := json.Marshal(countsByMachineType)
+	if err != nil || len(countsByMachineType) == 0 {
+		return ""
+	}
+
+	return strings.Trim(string(out), "{}")
 }
 
 func getOSName() string {
