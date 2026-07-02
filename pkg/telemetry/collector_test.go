@@ -1966,6 +1966,26 @@ func TestGetStaticNodeCount(t *testing.T) {
 			},
 			want: `"ct5lp-hightpu-8t":16`,
 		},
+		{
+			// 13. Multiplier properties (num_node_pools, num_slices)
+			// Validates that node count multiplies correctly when num_node_pools and num_slices are present.
+			name: "num_node_pools and num_slices multiply the base count",
+			bp: config.Blueprint{
+				Groups: []config.Group{{
+					Name: config.GroupName("primary"),
+					Modules: []config.Module{{
+						ID: config.ModuleID("multi_pool"),
+						Settings: config.NewDict(map[string]cty.Value{
+							"machine_type":      cty.StringVal("n2-standard-4"),
+							"static_node_count": cty.NumberIntVal(2),
+							"num_node_pools":    cty.NumberIntVal(3),
+							"num_slices":        cty.NumberIntVal(4),
+						}),
+					}},
+				}},
+			},
+			want: `"n2-standard-4":8`, // 2 * max(3, 4) = 8
+		},
 	}
 
 	for _, tc := range tests {

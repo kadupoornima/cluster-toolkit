@@ -254,21 +254,55 @@ func processInlineItem(item cty.Value, topMachineType string, counts map[string]
 }
 
 func getTopLevelNodeCount(m config.Module, bp config.Blueprint, topMachineType string) (int, bool) {
+	var baseCount int
+	var found bool
+
 	for _, key := range staticNodeCountSettings {
-		if count, found := extractExplicitIntSetting(key, m, bp); found {
-			return count, true
+		if count, ok := extractExplicitIntSetting(key, m, bp); ok {
+			baseCount = count
+			found = true
+			break
 		}
 	}
 
 	// Static node count is calculated from the Topology for TPU machines.
-	if count, found := getTPUNodeCount(m, bp, topMachineType); found {
-		return count, true
+	if !found {
+		if count, ok := getTPUNodeCount(m, bp, topMachineType); ok {
+			baseCount = count
+			found = true
+		}
 	}
 
-	if count, found := extractDefaultSetting[int](staticNodeCountSettings, m); found {
-		return count, true
+	if !found {
+		if count, ok := extractDefaultSetting[int](staticNodeCountSettings, m); ok {
+			baseCount = count
+			found = true
+		}
 	}
-	return 0, false
+
+	if !found {
+		return 0, false
+	}
+
+	pools := getMultiplier("num_node_pools", m, bp)
+	slices := getMultiplier("num_slices", m, bp)
+	multiplier := max(slices, pools)
+
+	return baseCount * multiplier, true
+}
+
+func getMultiplier(key string, m config.Module, bp config.Blueprint) int {
+	if val, ok := extractExplicitIntSetting(key, m, bp); ok {
+		if val > 0 {
+			return val
+		}
+	}
+	if val, ok := extractDefaultSetting[int]([]string{key}, m); ok {
+		if val > 0 {
+			return val
+		}
+	}
+	return 1
 }
 
 // Logic taken from pkg/config/hardware.go.
@@ -353,6 +387,11 @@ func extractDefaultSetting[T any](keys []string, m config.Module) (T, bool) {
 
 	resCh := make(chan result, 1)
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				resCh <- result{err: fmt.Errorf("panic in GetModuleInfo: %v", r)}
+			}
+		}()
 		mi, err := modulereader.GetModuleInfo(m.Source, kindStr)
 		resCh <- result{mi: mi, err: err}
 	}()
