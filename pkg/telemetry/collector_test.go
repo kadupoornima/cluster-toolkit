@@ -72,6 +72,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 	tests := []struct {
 		name             string
 		errorCode        int
+		err              error
 		installationMode string
 		setupCmd         func(cmd *cobra.Command) // Hook to configure the command
 		setupCollector   func(c *Collector)       // Hook to mock internal collector state
@@ -80,6 +81,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 		{
 			name:             "Success exit code",
 			errorCode:        0,
+			err:              nil,
 			installationMode: SOURCE,
 			setupCmd: func(cmd *cobra.Command) {
 				// Define dummy flags for the mock command
@@ -131,6 +133,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 		{
 			name:             "Failure exit code with missing region, zone, and machine type",
 			errorCode:        1,
+			err:              nil,
 			installationMode: BINARY,
 			setupCmd: func(cmd *cobra.Command) {
 				// No flags set
@@ -156,6 +159,24 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 				INSTALLATION_MODE: BINARY,
 			},
 		},
+		{
+			name:             "Failure exit code with error",
+			errorCode:        1,
+			err:              errors.New("permission denied error"),
+			installationMode: SOURCE,
+			setupCmd: func(cmd *cobra.Command) {
+			},
+			setupCollector: func(c *Collector) {
+				c.blueprint = config.Blueprint{
+					Vars:   config.NewDict(map[string]cty.Value{}),
+					Groups: []config.Group{},
+				}
+			},
+			expectedValues: map[string]string{
+				EXIT_CODE:  "1",
+				ERROR_TYPE: ErrTypePermissionDenied,
+			},
+		},
 	}
 
 	for _, tt := range tests {
@@ -176,7 +197,7 @@ func TestCollectMetrics_Extensible(t *testing.T) {
 			}
 
 			// Run the method being tested
-			c.CollectMetrics(tt.errorCode)
+			c.CollectMetrics(tt.errorCode, tt.err)
 
 			// Assert that all expected keys are populated in the metadata
 			for _, key := range expectedKeys {
@@ -325,7 +346,7 @@ func TestBuildConcordEvent(t *testing.T) {
 	rootCmd.AddCommand(childCmd)
 
 	c := NewCollector(childCmd, nil, SOURCE)
-	c.CollectMetrics(0)
+	c.CollectMetrics(0, nil)
 
 	event := c.BuildConcordEvent()
 
@@ -1993,6 +2014,103 @@ func TestGetStaticNodeCount(t *testing.T) {
 			got := getStaticNodeCount(tc.bp)
 			if got != tc.want {
 				t.Errorf("getStaticNodeCount() = %q; want %q", got, tc.want)
+func TestGetErrorType(t *testing.T) {
+	tests := []struct {
+		name     string
+		err      error
+		expected string
+	}{
+		{
+			name:     "Nil Error",
+			err:      nil,
+			expected: "",
+		},
+		{
+			name:     "Permission Denied",
+			err:      os.ErrPermission,
+			expected: ErrTypePermissionDenied,
+		},
+		{
+			name:     "File Not Exist",
+			err:      os.ErrNotExist,
+			expected: ErrTypeFileNotFound,
+		},
+		{
+			name:     "Context Deadline Exceeded",
+			err:      context.DeadlineExceeded,
+			expected: ErrTypeTimeout,
+		},
+		{
+			name:     "Context Canceled",
+			err:      context.Canceled,
+			expected: ErrTypeCanceled,
+		},
+		{
+			name:     "Text Match Validation",
+			err:      errors.New("invalid argument provided"),
+			expected: ErrTypeValidation,
+		},
+		{
+			name:     "Text Match Network",
+			err:      errors.New("failed to dial tcp: connection refused"),
+			expected: ErrTypeNetwork,
+		},
+		{
+			name:     "Text Match Permission",
+			err:      errors.New("server responded with 403 forbidden"),
+			expected: ErrTypePermissionDenied,
+		},
+		{
+			name:     "Text Match Not Found",
+			err:      errors.New("resource not found"),
+			expected: ErrTypeFileNotFound,
+		},
+		{
+			name:     "Unknown Error",
+			err:      errors.New("something went entirely wrong"),
+			expected: ErrTypeUnknown,
+		},
+		{
+			name:     "Text Match Quota",
+			err:      errors.New("google api error: quota exceeded for c2-standard-8"),
+			expected: ErrTypeQuotaExceeded,
+		},
+		{
+			name:     "Text Match Auth",
+			err:      errors.New("unauthorized request to remote server"),
+			expected: ErrTypeAuthentication,
+		},
+		{
+			name:     "Text Match Provisioning",
+			err:      errors.New("deployment failed to finish"),
+			expected: ErrTypeProvisioning,
+		},
+		{
+			name:     "Text Match Stockout",
+			err:      errors.New("A c2-standard-60 VM instance is currently unavailable"),
+			expected: ErrTypeStockout,
+		},
+		{
+			name:     "Text Match APIDisabled",
+			err:      errors.New("Cloud Filestore API has not been used in project 12345 before or it is disabled."),
+			expected: ErrTypeAPIDisabled,
+		},
+		{
+			name:     "Text Match ResourceAlreadyExists",
+			err:      errors.New("googleapi: Error 409: Resource already exists"),
+			expected: ErrTypeResourceExists,
+		},
+		{
+			name:     "Capitalization Test",
+			err:      errors.New("PERMISSION DENIED TO ACCESS THIS RESOURCE"),
+			expected: ErrTypePermissionDenied,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := getErrorType(tt.err); got != tt.expected {
+				t.Errorf("getErrorType() = %v, want %v", got, tt.expected)
 			}
 		})
 	}

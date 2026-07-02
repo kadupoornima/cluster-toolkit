@@ -17,8 +17,10 @@ package telemetry
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"hpc-toolkit/pkg/config"
 	"hpc-toolkit/pkg/shell"
+	"net"
 	"path/filepath"
 	"runtime"
 	"slices"
@@ -60,7 +62,7 @@ func NewCollector(cmd *cobra.Command, args []string, installationMode string) *C
 }
 
 // Main function for collecting Telemetry metrics.
-func (c *Collector) CollectMetrics(errorCode int) {
+func (c *Collector) CollectMetrics(errorCode int, err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -83,6 +85,7 @@ func (c *Collector) CollectMetrics(errorCode int) {
 	c.metadata[INSTALLATION_MODE] = c.installationMode
 	c.metadata[IS_TEST_DATA] = getIsTestData()
 	c.metadata[EXIT_CODE] = strconv.Itoa(errorCode)
+	c.metadata[ERROR_TYPE] = getErrorType(err)
 }
 
 // Method to collect Concord metrics and build event.
@@ -348,6 +351,39 @@ func getIsGoogler() bool {
 	_ = config.SetIsGoogler(isInternal)
 
 	return isInternal
+}
+
+// getErrorType maps an error to a broad, PII-safe category.
+func getErrorType(err error) string {
+	if err == nil {
+		return ""
+	}
+
+	// Standard Go error checks
+	for _, m := range exactErrMatchers {
+		if errors.Is(err, m.target) {
+			return m.category
+		}
+	}
+
+	// Check for networking/timeout errors specifically
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		if netErr.Timeout() {
+			return ErrTypeTimeout
+		}
+		return ErrTypeNetwork
+	}
+
+	// Fallback string matching on safe keywords
+	errMsg := strings.ToLower(err.Error())
+	for _, m := range substringErrMatchers {
+		if strings.Contains(errMsg, m.substring) {
+			return m.category
+		}
+	}
+
+	return ErrTypeUnknown
 }
 
 // This method intentionally returns "true", as all telemetry is in testing phase currently.
