@@ -199,7 +199,7 @@ func getModuleNodeCounts(m config.Module, bp config.Blueprint) map[string]int {
 
 	// Fallback to standard top-level extraction
 	if topMachineType != "" {
-		if count, found := getTopLevelNodeCount(m, bp); found {
+		if count, found := getTopLevelNodeCount(m, bp, topMachineType); found {
 			counts[topMachineType] += count
 		}
 	}
@@ -253,15 +253,46 @@ func processInlineItem(item cty.Value, topMachineType string, counts map[string]
 	}
 }
 
-func getTopLevelNodeCount(m config.Module, bp config.Blueprint) (int, bool) {
+func getTopLevelNodeCount(m config.Module, bp config.Blueprint, topMachineType string) (int, bool) {
 	for _, key := range staticNodeCountSettings {
 		if count, found := extractExplicitIntSetting(key, m, bp); found {
 			return count, true
 		}
 	}
+
+	// Static node count is calculated from the Topology for TPU machines.
+	if count, found := getTPUNodeCount(m, bp, topMachineType); found {
+		return count, true
+	}
+
 	if count, found := extractDefaultSetting[int](staticNodeCountSettings, m); found {
 		return count, true
 	}
+	return 0, false
+}
+
+// Logic taken from pkg/config/hardware.go.
+func getTPUNodeCount(m config.Module, bp config.Blueprint, topMachineType string) (int, bool) {
+	if !config.IsTPU(topMachineType) {
+		return 0, false
+	}
+
+	tpuTopologyStr, hasTopology := config.ExtractTopology(bp, &m)
+	if !hasTopology {
+		return 0, false
+	}
+
+	if m.Settings.Has("enable_flex_start") {
+		val, err := bp.Eval(m.Settings.Get("enable_flex_start"))
+		if err == nil && val.Type() == cty.Bool && !val.IsNull() && val.IsKnown() && val.True() {
+			return 0, false
+		}
+	}
+
+	if nodes, err := config.CalculateAcceleratorNodes(topMachineType, tpuTopologyStr, 0); err == nil {
+		return nodes, true
+	}
+
 	return 0, false
 }
 
