@@ -1889,6 +1889,26 @@ func TestGetStaticNodeCount(t *testing.T) {
 			want: `"a3u":2,"g4":3`,
 		},
 		{
+			name: "Extracts tpu_topology for TPU nodes",
+			bp: config.Blueprint{
+				Groups: []config.Group{
+					{
+						Name: config.GroupName("primary"),
+						Modules: []config.Module{
+							{
+								ID: config.ModuleID("tpu_node"),
+								Settings: config.NewDict(map[string]cty.Value{
+									"machine_type": cty.StringVal("ct5lp-hightpu-4t"),
+									"tpu_topology": cty.StringVal("2x4"),
+								}),
+							},
+						},
+					},
+				},
+			},
+			want: `"ct5lp-hightpu-4t":2`,
+		},
+		{
 			name: "Ignores modules with no counts",
 			bp: config.Blueprint{
 				Groups: []config.Group{

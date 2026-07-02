@@ -196,10 +196,25 @@ func extractExplicitStringSetting(key string, m config.Module, bp config.Bluepri
 	return ""
 }
 
-// extractDefaultStringSetting attempts to get the given key string value from the module's defaults, with a timeout.
-func extractDefaultStringSetting(key string, m config.Module) string {
+func getModuleInfoWithTimeout(m config.Module, kindStr string) (modulereader.ModuleInfo, error) {
+	resCh := make(chan result, 1)
+	go func() {
+		mi, err := modulereader.GetModuleInfo(m.Source, kindStr)
+		resCh <- result{mi: mi, err: err}
+	}()
+
+	select {
+	case res := <-resCh:
+		return res.mi, res.err
+	case <-time.After(500 * time.Millisecond):
+		return modulereader.ModuleInfo{}, fmt.Errorf("timeout fetching module info")
+	}
+}
+
+// fetchModuleDefaultInput returns the default value for the given input key, or nil.
+func fetchModuleDefaultInput(m config.Module, key string) any {
 	if m.Source == "" {
-		return ""
+		return nil
 	}
 
 	kindStr := m.Kind.String()
@@ -210,48 +225,78 @@ func extractDefaultStringSetting(key string, m config.Module) string {
 
 	// Only fetch module info if the kind is valid, avoiding a fatal error in GetModuleInfo
 	if kindStr != config.TerraformKind.String() && kindStr != config.PackerKind.String() {
-		return ""
+		return nil
 	}
 
-	resCh := make(chan result, 1)
-
-	// Use a strict timeout. GetModuleInfo can trigger network requests (e.g. git clone).
-	go func() {
-		mi, err := modulereader.GetModuleInfo(m.Source, kindStr)
-		resCh <- result{mi: mi, err: err}
-	}()
-
-	select {
-	case res := <-resCh:
-		if res.err != nil {
-			return ""
-		}
-		for _, input := range res.mi.Inputs {
-			if input.Name == key && input.Default != nil {
-				// Verify the default is a string (protects against complex types)
-				if mType, ok := input.Default.(string); ok {
-					return mType
-				}
-			}
-		}
-	case <-time.After(500 * time.Millisecond):
-		// Timeout reached: gracefully return empty string to prevent blocking
+	mi, err := getModuleInfoWithTimeout(m, kindStr)
+	if err != nil {
+		return nil
 	}
 
+	for _, input := range mi.Inputs {
+		if input.Name == key && input.Default != nil {
+			return input.Default
+		}
+	}
+
+	return nil
+}
+
+// extractDefaultStringSetting attempts to get the given key string value from the module's defaults.
+func extractDefaultStringSetting(key string, m config.Module) string {
+	if val := fetchModuleDefaultInput(m, key); val != nil {
+		if strVal, ok := val.(string); ok {
+			return strVal
+		}
+	}
 	return ""
 }
 
-func getStaticNodeCountFromModule(m config.Module, bp config.Blueprint) int {
-	// 1. Try explicit settings first
+func getStaticNodeCountFromModule(m config.Module, bp config.Blueprint, mType string) int {
+	// Try explicit settings first
 	for _, key := range staticNodeCountSettings {
 		if t := extractExplicitIntSetting(key, m, bp); t != 0 {
 			return t
 		}
 	}
-	// 2. If no explicit setting, try defaults
+
+	// Calculate TPU topology explicitly if no node count was explicitly set.
+	if nodes := getTPUNodeCount(m, bp, mType); nodes > 0 {
+		return nodes
+	}
+
+	// If no explicit setting, try defaults
 	for _, key := range staticNodeCountSettings {
 		if t := extractDefaultIntSetting(key, m); t != 0 {
 			return t
+		}
+	}
+	return 0
+}
+
+func isFlexStartEnabled(m config.Module, bp config.Blueprint) bool {
+	if m.Settings.Has("enable_flex_start") {
+		val, err := bp.Eval(m.Settings.Get("enable_flex_start"))
+		if err == nil && val.Type() == cty.Bool && !val.IsNull() && val.IsKnown() && val.True() {
+			return true
+		}
+	}
+	return false
+}
+
+func getTPUNodeCount(m config.Module, bp config.Blueprint, mType string) int {
+	if mType == "" || !config.IsTPU(mType) {
+		return 0
+	}
+
+	if isFlexStartEnabled(m, bp) {
+		return 0
+	}
+
+	if topo, ok := config.ExtractTopology(bp, &m); ok {
+		nodes, err := config.CalculateAcceleratorNodes(mType, topo, 0)
+		if err == nil && nodes > 0 {
+			return nodes
 		}
 	}
 	return 0
@@ -280,48 +325,16 @@ func extractExplicitIntSetting(key string, m config.Module, bp config.Blueprint)
 	return 0
 }
 
-// extractDefaultIntSetting attempts to get the given key int value from the module's defaults, with a timeout.
+// extractDefaultIntSetting attempts to get the given key int value from the module's defaults.
 func extractDefaultIntSetting(key string, m config.Module) int {
-	if m.Source == "" {
-		return 0
-	}
-
-	kindStr := m.Kind.String()
-	// Default to terraform if Kind is omitted (as happens in tests or unexpanded blueprints)
-	if kindStr == "" {
-		kindStr = config.TerraformKind.String()
-	}
-
-	// Only fetch module info if the kind is valid, avoiding a fatal error in GetModuleInfo
-	if kindStr != config.TerraformKind.String() && kindStr != config.PackerKind.String() {
-		return 0
-	}
-
-	resCh := make(chan result, 1)
-
-	// Use a strict timeout. GetModuleInfo can trigger network requests (e.g. git clone).
-	go func() {
-		mi, err := modulereader.GetModuleInfo(m.Source, kindStr)
-		resCh <- result{mi: mi, err: err}
-	}()
-
-	select {
-	case res := <-resCh:
-		if res.err != nil {
-			return 0
+	if val := fetchModuleDefaultInput(m, key); val != nil {
+		switch v := val.(type) {
+		case int:
+			return v
+		case float64:
+			return int(v)
 		}
-		for _, input := range res.mi.Inputs {
-			if input.Name == key && input.Default != nil {
-				// Verify the default is an int (protects against complex types)
-				if val, ok := input.Default.(int); ok {
-					return val
-				}
-			}
-		}
-	case <-time.After(500 * time.Millisecond):
-		// Timeout reached: gracefully return empty string to prevent blocking
 	}
-
 	return 0
 }
 

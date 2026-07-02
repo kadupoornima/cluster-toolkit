@@ -276,7 +276,7 @@ func getStaticNodeCount(bp config.Blueprint) string {
 		mType := getMachineTypeFromModule(m, bp)
 		logging.Info("mType: %v", mType)
 		if mType != "" {
-			count := getStaticNodeCountFromModule(m, bp)
+			count := getStaticNodeCountFromModule(m, bp, mType)
 			logging.Info("count: %v", count)
 
 			if count > 0 {

@@ -149,7 +149,7 @@ func evalString(bp Blueprint, val cty.Value) (string, bool) {
 	return "", false
 }
 
-func extractTopology(bp Blueprint, mod *Module) (string, bool) {
+func ExtractTopology(bp Blueprint, mod *Module) (string, bool) {
 	if mod.Settings.Has("tpu_topology") {
 		if str, ok := evalString(bp, mod.Settings.Get("tpu_topology")); ok {
 			return str, true
@@ -202,7 +202,7 @@ func expandHardwareSettings(bp Blueprint, mod *Module) error {
 		return nil
 	}
 
-	tpuTopologyStr, hasTopology := extractTopology(bp, mod)
+	tpuTopologyStr, hasTopology := ExtractTopology(bp, mod)
 	if !hasTopology || !mod.Settings.Has("machine_type") {
 		return nil
 	}
