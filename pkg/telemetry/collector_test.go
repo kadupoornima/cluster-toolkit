@@ -1948,6 +1948,24 @@ func TestGetStaticNodeCount(t *testing.T) {
 			},
 			want: `"c2-standard-8":3`,
 		},
+		{
+			// 12. TPU Topology calculation
+			// Validates that TPU node count is calculated correctly using the topology string when static_node_count is missing.
+			name: "TPU topology automatically infers static_node_count",
+			bp: config.Blueprint{
+				Groups: []config.Group{{
+					Name: config.GroupName("primary"),
+					Modules: []config.Module{{
+						ID: config.ModuleID("tpu_pool"),
+						Settings: config.NewDict(map[string]cty.Value{
+							"machine_type": cty.StringVal("ct5lp-hightpu-8t"),
+							"tpu_topology": cty.StringVal("8x16"),
+						}),
+					}},
+				}},
+			},
+			want: `"ct5lp-hightpu-8t":16`,
+		},
 	}
 
 	for _, tc := range tests {
