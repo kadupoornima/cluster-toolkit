@@ -296,6 +296,7 @@ func getMultiplier(key string, m config.Module, bp config.Blueprint) int {
 		if val > 0 {
 			return val
 		}
+		return 1
 	}
 	if val, ok := extractDefaultSetting[int]([]string{key}, m); ok {
 		if val > 0 {
@@ -319,7 +320,7 @@ func getTPUNodeCount(m config.Module, bp config.Blueprint, topMachineType string
 	if m.Settings.Has("enable_flex_start") {
 		val, err := bp.Eval(m.Settings.Get("enable_flex_start"))
 		if err == nil && val.Type() == cty.Bool && !val.IsNull() && val.IsKnown() && val.True() {
-			return 0, false
+			return 0, true
 		}
 	}
 
